@@ -1,0 +1,35 @@
+# Copy to config.yaml and fill in secrets
+
+supabase:
+  url: "https://YOUR_PROJECT.supabase.co"
+  service_role_key: "YOUR_SERVICE_ROLE_KEY"
+
+scraping:
+  httpx_delay_seconds: 1.5
+  playwright_delay_seconds: 4
+  max_pages_classifieds: 10
+  max_pages_auctions: 50
+  # Active sources: komornik, e_licytacje (Facebook via webhook). Omit or [] to run both.
+  sources: ["komornik", "e_licytacje"]
+  # Komornik: only this region (default Kielce / świętokrzyskie). Set to "" to scrape all.
+  komornik_region: "świętokrzyskie"
+
+# Apify (Facebook): token do pobierania datasetów; webhook_secret do weryfikacji POST /webhook/apify
+apify:
+  token: "YOUR_APIFY_TOKEN"
+  webhook_secret: ""
+
+# On-demand run (POST /api/run, e.g. navbar refresh). If set, require header X-Run-Secret. If unset, apify.webhook_secret is used.
+# run_api:
+#   secret: "YOUR_RUN_SECRET"
+
+logging:
+  level: "INFO"
+  rotation: "10 MB"
+  retention: "7 days"
+
+scheduler:
+  enabled: true
+  # Updates once per day at 8:00 (Europe/Warsaw)
+  cron: "0 8 * * *"
+  timezone: "Europe/Warsaw"
