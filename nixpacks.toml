@@ -1,0 +1,12 @@
+# Railway/Nixpacks: explicit build and start for Python app
+[providers]
+python = "3.10"
+
+[phases.setup]
+nixPkgs = ["python310"]
+
+[phases.install]
+cmds = ["pip install -e ."]
+
+[start]
+cmd = "hunter webhook"
