@@ -25,10 +25,9 @@ Paginacja: `?page=2`, `?page=3`, …
 
 ## 2. Województwo (region)
 
-- **Kryterium:** tylko oferty z województwa **świętokrzyskiego** (region Kielce).
-- **Sposób:** po pobraniu strony listy sprawdzana jest kolumna tabeli **„Miasto (Województwo)”**. Do wyników trafiają wyłącznie wiersze, w których ta kolumna **zawiera** tekst `świętokrzyskie` (bez rozróżniania wielkości liter).
-- **Konfiguracja:** `config.yaml` → `scraping.komornik_region: "świętokrzyskie"`.  
-  Wartość pusta (`""`) wyłącza filtr województwa (wszystkie regiony).
+- **Domyślnie:** wszystkie regiony (każda oferta ma pole `region` do filtrowania we frontendzie).
+- **Opcjonalny filtr:** w `config.yaml` ustaw `scraping.komornik_region` np. na `"świętokrzyskie"`, żeby ograniczyć do jednego województwa. Po pobraniu strony listy sprawdzana jest kolumna **„Miasto (Województwo)”**; do wyników trafiają tylko wiersze, w których ta kolumna zawiera podany tekst (bez rozróżniania wielkości liter).
+- **Konfiguracja:** `komornik_region: ""` = wszystkie regiony; `komornik_region: "świętokrzyskie"` = tylko świętokrzyskie.
 
 ---
 
@@ -46,8 +45,8 @@ Paginacja: `?page=2`, `?page=3`, …
 | Źródło         | https://licytacje.komornik.pl |
 | Typ mienia     | Nieruchomości        |
 | Kategoria      | Mieszkania (Filter/30) |
-| Województwo    | świętokrzyskie (Kielce) |
-| Filtr regionu  | Po kolumnie „Miasto (Województwo)” w tabeli |
+| Województwo    | Wszystkie (domyślnie); opcjonalnie jeden np. świętokrzyskie |
+| Filtr regionu  | Po kolumnie „Miasto (Województwo)”; gdy `komornik_region: ""` — brak filtra, każde ogłoszenie ma pole `region` |
 | Paginacja      | Tak, do `max_pages_auctions` stron |
 
 Żadne inne kryteria (np. cena, data) nie są na razie ustawiane w zapytaniu — strona listy zwraca domyślną kolejność; filtrowanie po województwie odbywa się po stronie scrapera na podstawie tabeli.

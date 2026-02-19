@@ -8,7 +8,7 @@ Obecnie włączone są tylko trzy źródła. Konfiguracja: `scraping.sources`, `
 
 | Source | Tech | Notes |
 |--------|------|--------|
-| licytacje.komornik.pl | httpx + BeautifulSoup | Bailiff auctions (mieszkania, woj. świętokrzyskie) — [docs/KOMMORNIK_SEARCH_CRITERIA.md](docs/KOMMORNIK_SEARCH_CRITERIA.md) |
+| licytacje.komornik.pl | httpx + BeautifulSoup | Bailiff auctions (mieszkania, wszystkie regiony) — [docs/KOMMORNIK_SEARCH_CRITERIA.md](docs/KOMMORNIK_SEARCH_CRITERIA.md) |
 | elicytacje.komornik.pl | httpx + BeautifulSoup | Court auctions (Krajowa Rada Komornicza). List page may be JS-rendered (0 links in initial HTML); browser-based fetcher could be added later. |
 | Facebook (Apify) | Webhook + Apify API | Dataset → filter (słowa sprzedażowe) → upsert `source=facebook` |
 

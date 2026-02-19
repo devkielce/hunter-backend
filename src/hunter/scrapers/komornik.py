@@ -125,8 +125,8 @@ def _extract_city(location: str) -> str:
     return parts[0] if parts else location
 
 
-# Default: only województwo świętokrzyskie (Kielce region) — publiczne oferty komornicze
-DEFAULT_KOMMORNIK_REGION = "świętokrzyskie"
+# Default: all regions (no filter). Set komornik_region in config to e.g. "świętokrzyskie" to limit.
+DEFAULT_KOMMORNIK_REGION = ""
 
 
 def _cutoff_for_days_back(days: int) -> Optional[datetime]:
