@@ -176,6 +176,25 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
 ---
 
+## Why it works locally but not on Railway
+
+**config.yaml is not deployed.** It’s in `.gitignore`, so Railway only has `config.example.yaml` (placeholders) and **environment variables**. Locally you have a real `config.yaml` with Supabase and the run secret; on Railway you must provide the same via **Railway → Variables**.
+
+**Railway checklist (required):**
+
+| Variable | Purpose |
+|----------|--------|
+| **SUPABASE_URL** | Supabase project URL (same as in your local config) |
+| **SUPABASE_SERVICE_ROLE_KEY** | Supabase service role key (so scrapers can upsert) |
+| **APIFY_WEBHOOK_SECRET** | Run API and Apify webhook auth; frontend must send this as `X-Run-Secret` |
+
+- If **SUPABASE_URL** or **SUPABASE_SERVICE_ROLE_KEY** are missing, scrapers may fail or upsert 0 rows.
+- If **APIFY_WEBHOOK_SECRET** is set on Railway but the frontend doesn’t send the same value in **X-Run-Secret**, you get **401 Unauthorized** on POST /api/run and GET /api/run/status.
+
+Optional: **APIFY_TOKEN** (for Apify Facebook flow). Scraping options (e.g. `max_pages_auctions`) come from `config.example.yaml` on Railway unless you add more env-based overrides.
+
+---
+
 ## Why you get 500
 
 - **BACKEND_URL** or **HUNTER_RUN_SECRET** missing in Vercel → proxy returns 500 or backend returns 401.
