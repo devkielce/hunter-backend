@@ -93,6 +93,9 @@ def api_run():
     _relevant_headers = [k for k in getattr(request.headers, "keys", lambda: [])() if "run" in k.lower() or "secret" in k.lower()]
     import json as _json
     try:
+        _log_dir = __import__("os").path.dirname(_log_path)
+        if _log_dir:
+            __import__("os").makedirs(_log_dir, exist_ok=True)
         with open(_log_path, "a") as _f:
             _f.write(_json.dumps({"hypothesisId": "H1", "message": "api_run auth check", "data": {"secret_configured": _secret_ok, "header_present": _header_present, "provided_len": _provided_len, "expected_len": _expected_len, "return_401": _return_401, "relevant_header_names": _relevant_headers}, "timestamp": __import__("time").time(), "location": "webhook_server.py:api_run"}) + "\n")
     except Exception:
