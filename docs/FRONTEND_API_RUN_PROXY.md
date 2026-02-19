@@ -115,3 +115,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 - **BACKEND_URL** or **HUNTER_RUN_SECRET** missing in Vercel → proxy returns 500 or backend returns 401.
 - Proxy route missing or wrong path → Vercel may return 500 or 404.
 - After adding the route and env vars, **redeploy** the frontend on Vercel.
+
+---
+
+## 401 Unauthorized troubleshooting
+
+A **401** with `{ "ok": false, "error": "Unauthorized" }` means the backend (Railway) did not receive a valid **X-Run-Secret** header (missing or value does not match).
+
+Checklist:
+
+1. **Proxy sends the header** – In your route (`app/api/run/route.ts` or `pages/api/run.ts`), the outgoing `fetch` to Railway must set `headers["X-Run-Secret"] = process.env.HUNTER_RUN_SECRET` (or equivalent). No typo in the header name; the backend expects `X-Run-Secret`.
+2. **HUNTER_RUN_SECRET set on Vercel** – In Vercel → Project → Settings → Environment Variables, **HUNTER_RUN_SECRET** must be set for the environment you use (e.g. Production).
+3. **Value matches Railway** – **HUNTER_RUN_SECRET** must be the **exact** same string as **APIFY_WEBHOOK_SECRET** on Railway (copy from Railway → hunter-backend service → Variables). No leading/trailing spaces.
+4. **Redeploy** – Env changes apply only on the next deployment. Trigger a new deploy after adding or changing **HUNTER_RUN_SECRET**.
+5. **Env scope** – If you use Preview deployments, ensure **HUNTER_RUN_SECRET** is set for the environment that serves the request (e.g. Production when opening the production URL).
