@@ -141,7 +141,12 @@ def scrape_komornik(config: Optional[dict] = None) -> list[dict[str, Any]]:
     scraping = cfg.get("scraping", {})
     delay = float(scraping.get("httpx_delay_seconds", 1.5))
     max_pages = int(scraping.get("max_pages_auctions", 50))
-    region = (scraping.get("komornik_region") or DEFAULT_KOMMORNIK_REGION).strip() or None
+    # Only use default when key is missing; explicit "" means "all regions"
+    region_val = scraping.get("komornik_region")
+    if region_val is None:
+        region = (DEFAULT_KOMMORNIK_REGION or "").strip() or None
+    else:
+        region = (region_val or "").strip() or None
     days_back = scraping.get("days_back")
     cutoff = _cutoff_for_days_back(int(days_back)) if days_back is not None else None
 
