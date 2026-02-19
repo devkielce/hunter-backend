@@ -1,10 +1,13 @@
 """
 Flask server for Apify webhook: POST /webhook/apify.
 Verifies x-apify-webhook-secret (if configured), extracts dataset ID, runs process_apify_dataset, returns 200.
+On-demand scrapers: POST /api/run starts a background run and returns 202; GET /api/run/status returns run state.
 """
 from __future__ import annotations
 
 import os
+import threading
+from typing import Any
 
 from flask import Flask, request, jsonify
 from loguru import logger
@@ -14,6 +17,16 @@ from hunter.config import get_config
 from hunter.logging_config import setup_logging
 
 app = Flask(__name__)
+
+# Background run state (in-memory; lost on restart).
+_run_state: dict[str, Any] = {
+    "status": "idle",
+    "started_at": None,
+    "finished_at": None,
+    "results": None,
+    "error": None,
+}
+_run_lock = threading.Lock()
 
 
 def _get_webhook_secret() -> str | None:
@@ -71,32 +84,30 @@ def webhook_apify():
         return jsonify({"error": "Internal error"}), 500
 
 
-@app.route("/api/run", methods=["POST"])
-def api_run():
-    """
-    Run all scrapers on demand (for navbar refresh button).
-    Optional auth: set config run_api_secret and send header X-Run-Secret.
-    Returns per-source results (listings_found, listings_upserted, status).
-    """
+def _check_run_secret() -> tuple[bool, Any]:
+    """Return (True, None) if auth OK, else (False, response_tuple)."""
+    cfg = get_config()
+    secret = (cfg.get("run_api") or {}).get("secret") or (cfg.get("apify", {}) or {}).get("webhook_secret")
+    if not secret or not isinstance(secret, str) or not secret.strip():
+        return True, None
+    provided = request.headers.get("x-run-secret") or request.headers.get("X-Run-Secret")
+    if provided != secret.strip():
+        return False, (jsonify({"error": "Unauthorized"}), 401)
+    return True, None
+
+
+def _run_scrapers_background() -> None:
+    """Run all scrapers and update _run_state when done. Runs in a daemon thread."""
+    from hunter.run import run_scraper
+    from hunter.scrapers import scrape_komornik, scrape_elicytacje
     try:
-        setup_logging(get_config())
         cfg = get_config()
-        secret = (cfg.get("run_api") or {}).get("secret") or (cfg.get("apify", {}) or {}).get("webhook_secret")
-        if secret and isinstance(secret, str) and secret.strip():
-            provided = request.headers.get("x-run-secret") or request.headers.get("X-Run-Secret")
-            if provided != secret.strip():
-                return jsonify({"error": "Unauthorized"}), 401
-        from hunter.run import run_scraper
-        from hunter.scrapers import scrape_komornik, scrape_elicytacje
         all_scrapers = [
             ("komornik", scrape_komornik),
             ("e_licytacje", scrape_elicytacje),
         ]
         sources = cfg.get("scraping", {}).get("sources")
-        if sources:
-            scrapers = [(n, fn) for n, fn in all_scrapers if n in sources]
-        else:
-            scrapers = all_scrapers
+        scrapers = [(n, fn) for n, fn in all_scrapers if n in sources] if sources else all_scrapers
         results = []
         for name, fn in scrapers:
             found, upserted, status, err = run_scraper(name, fn, cfg, dry_run=False)
@@ -107,9 +118,68 @@ def api_run():
                 "status": status,
                 "error_message": err,
             })
-        return jsonify({"ok": True, "results": results}), 200
+        with _run_lock:
+            _run_state["status"] = "completed"
+            _run_state["finished_at"] = __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat()
+            _run_state["results"] = results
+            _run_state["error"] = None
+    except Exception as e:
+        logger.exception("Background scrapers failed: {}", e)
+        with _run_lock:
+            _run_state["status"] = "error"
+            _run_state["finished_at"] = __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat()
+            _run_state["results"] = _run_state.get("results") or []
+            _run_state["error"] = str(e)
+
+
+@app.route("/api/run", methods=["POST"])
+def api_run():
+    """
+    Start scrapers in the background. Returns 202 Accepted immediately.
+    Poll GET /api/run/status for completion and results.
+    If a run is already in progress, returns 409 Conflict.
+    """
+    try:
+        setup_logging(get_config())
+        ok, err_response = _check_run_secret()
+        if not ok:
+            return err_response[0], err_response[1]
+        with _run_lock:
+            if _run_state.get("status") == "running":
+                return jsonify({"ok": False, "error": "Run already in progress", "status": "running"}), 409
+            _run_state["status"] = "running"
+            _run_state["started_at"] = __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat()
+            _run_state["finished_at"] = None
+            _run_state["results"] = None
+            _run_state["error"] = None
+        t = threading.Thread(target=_run_scrapers_background, daemon=True)
+        t.start()
+        return jsonify({
+            "ok": True,
+            "status": "started",
+            "message": "Scrapers running in background. Poll GET /api/run/status for completion.",
+        }), 202
     except Exception as e:
         logger.exception("POST /api/run failed: {}", e)
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/run/status", methods=["GET"])
+def api_run_status():
+    """
+    Return current run state: status (idle|running|completed|error), started_at, finished_at, results, error.
+    Same X-Run-Secret auth as POST /api/run.
+    """
+    try:
+        setup_logging(get_config())
+        ok, err_response = _check_run_secret()
+        if not ok:
+            return err_response[0], err_response[1]
+        with _run_lock:
+            state = dict(_run_state)
+        return jsonify({"ok": True, **state}), 200
+    except Exception as e:
+        logger.exception("GET /api/run/status failed: {}", e)
         return jsonify({"ok": False, "error": str(e)}), 500
 
 

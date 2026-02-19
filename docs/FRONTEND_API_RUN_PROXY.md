@@ -1,25 +1,32 @@
 # Frontend: proxy for POST /api/run (Odśwież oferty)
 
-The backend exposes **POST /api/run** on Railway. The frontend must **not** call Railway directly from the browser (to avoid exposing the run secret). Instead, the frontend calls its own **Vercel API route**, which proxies the request to Railway with the secret.
+The backend exposes **POST /api/run** and **GET /api/run/status** on Railway. The frontend must **not** call Railway directly from the browser (to avoid exposing the run secret). Instead, the frontend calls its own **Vercel API routes**, which proxy to Railway with the secret.
+
+Scrapers run **in the background** on the backend. POST /api/run returns **202 Accepted** immediately; the frontend should then **poll GET /api/run/status** until the run is completed or failed, then refresh the listings.
 
 ---
 
 ## Backend contract (Railway)
 
+**POST /api/run**
+
 - **URL:** `https://hunter-backend-production-0f3d.up.railway.app/api/run` (or your current Railway URL)
 - **Method:** POST
-- **Headers:**
-  - **X-Run-Secret:** (required if backend has a secret) Same value as `APIFY_WEBHOOK_SECRET` on Railway. Backend reads secret from config `run_api.secret` or `apify.webhook_secret` (env: `APIFY_WEBHOOK_SECRET`). If no secret is set on the backend, the header is optional.
+- **Headers:** **X-Run-Secret** (required if backend has a secret) — same value as `APIFY_WEBHOOK_SECRET` on Railway.
 - **Body:** None required (empty body or `{}`).
-- **Success (200):** JSON body:
-  ```json
-  { "ok": true, "results": [
-    { "source": "komornik", "listings_found": 1, "listings_upserted": 1, "status": "success", "error_message": null },
-    { "source": "e_licytacje", ... }
-  ]}
-  ```
-- **401:** Missing or wrong `X-Run-Secret`.
-- **500:** Backend error (e.g. Supabase or scraper failure).
+- **202 Accepted:** Run started in background. Body: `{ "ok": true, "status": "started", "message": "Scrapers running in background. Poll GET /api/run/status for completion." }`. Frontend should poll **GET /api/run/status** until `status` is `completed` or `error`.
+- **409 Conflict:** A run is already in progress. Body: `{ "ok": false, "error": "Run already in progress", "status": "running" }`.
+- **401:** Missing or wrong X-Run-Secret.
+- **500:** Backend error before starting the thread.
+
+**GET /api/run/status**
+
+- **URL:** `https://hunter-backend-production-0f3d.up.railway.app/api/run/status`
+- **Method:** GET
+- **Headers:** Same **X-Run-Secret** as POST /api/run (required if backend has a secret).
+- **200 OK:** Body: `{ "ok": true, "status": "idle" | "running" | "completed" | "error", "started_at": "<iso>" | null, "finished_at": "<iso>" | null, "results": [ ... ] | null, "error": "<string>" | null }`. When `status === "completed"`, `results` is the same shape as before (per-source listings_found, listings_upserted, status, error_message). When `status === "error"`, `error` contains the message.
+- **401:** Missing or wrong X-Run-Secret.
+- **500:** Backend error.
 
 ---
 
@@ -30,9 +37,20 @@ The backend exposes **POST /api/run** on Railway. The frontend must **not** call
 
 ---
 
+## Frontend flow (Odśwież oferty)
+
+1. User clicks **Odśwież oferty** → frontend calls **POST /api/run** (your Vercel proxy → Railway).
+2. If response is **202**: show e.g. "Odświeżanie w toku..." and start **polling GET /api/run/status** every 2–3 seconds (same proxy → Railway, same **X-Run-Secret**).
+3. When **GET /api/run/status** returns `status === "completed"`: refresh the listings list (re-fetch your listings from Supabase or your API) and show success. When `status === "error"`: show `error` to the user.
+4. If POST /api/run returns **409**: a run is already in progress; you can show "Odświeżanie już trwa" and optionally poll status until completed.
+
+No long timeout is needed on the proxy: POST returns immediately (202), and each GET /api/run/status is a quick request.
+
+---
+
 ## Next.js proxy implementation
 
-The frontend currently does `fetch("/api/run", { method: "POST" })`. That request hits **Vercel**, so you must have a route that proxies to Railway.
+You need **two** proxy routes: one for **POST /api/run** and one for **GET /api/run/status** (e.g. `app/api/run/status/route.ts` or `pages/api/run/status.ts`). Both must send **X-Run-Secret** to Railway.
 
 ### App Router (app/api/run/route.ts)
 
@@ -76,6 +94,31 @@ export async function POST() {
 }
 ```
 
+**GET /api/run/status (App Router: app/api/run/status/route.ts)**
+
+```ts
+import { NextResponse } from "next/server";
+
+const BACKEND_URL = process.env.BACKEND_URL;
+const HUNTER_RUN_SECRET = process.env.HUNTER_RUN_SECRET;
+
+export async function GET() {
+  if (!BACKEND_URL) {
+    return NextResponse.json({ error: "BACKEND_URL not configured" }, { status: 500 });
+  }
+  const url = `${BACKEND_URL.replace(/\/$/, "")}/api/run/status`;
+  const headers: HeadersInit = {};
+  if (HUNTER_RUN_SECRET) headers["X-Run-Secret"] = HUNTER_RUN_SECRET;
+  try {
+    const res = await fetch(url, { method: "GET", headers });
+    const data = await res.json().catch(() => ({}));
+    return NextResponse.json(data, { status: res.status });
+  } catch (e) {
+    return NextResponse.json({ error: "Backend request failed" }, { status: 502 });
+  }
+}
+```
+
 ### Pages Router (pages/api/run.ts)
 
 ```ts
@@ -103,6 +146,29 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     res.status(backendRes.status).json(data);
   } catch (e) {
     console.error("Proxy /api/run failed:", e);
+    res.status(502).json({ error: "Backend request failed" });
+  }
+}
+```
+
+**GET /api/run/status (Pages Router: pages/api/run/status.ts)**
+
+```ts
+import type { NextApiRequest, NextApiResponse } from "next";
+
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (req.method !== "GET") return res.status(405).json({ error: "Method not allowed" });
+  const BACKEND_URL = process.env.BACKEND_URL;
+  const HUNTER_RUN_SECRET = process.env.HUNTER_RUN_SECRET;
+  if (!BACKEND_URL) return res.status(500).json({ error: "BACKEND_URL not configured" });
+  const url = `${BACKEND_URL.replace(/\/$/, "")}/api/run/status`;
+  const headers: Record<string, string> = {};
+  if (HUNTER_RUN_SECRET) headers["X-Run-Secret"] = HUNTER_RUN_SECRET;
+  try {
+    const backendRes = await fetch(url, { method: "GET", headers });
+    const data = await backendRes.json().catch(() => ({}));
+    res.status(backendRes.status).json(data);
+  } catch (e) {
     res.status(502).json({ error: "Backend request failed" });
   }
 }
