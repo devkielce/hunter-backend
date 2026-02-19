@@ -82,7 +82,7 @@ def api_run():
     cfg = get_config()
     secret = (cfg.get("run_api") or {}).get("secret") or (cfg.get("apify", {}) or {}).get("webhook_secret")
     # #region agent log
-    _log_path = "/Users/arturwillonski/Documents/hunter-backend/.cursor/debug.log"
+    _log_path = str(__import__("pathlib").Path(__file__).resolve().parents[2] / ".cursor" / "debug.log")
     _secret_ok = secret and isinstance(secret, str) and bool(secret.strip())
     _provided = request.headers.get("x-run-secret") or request.headers.get("X-Run-Secret")
     _header_present = _provided is not None
@@ -92,14 +92,16 @@ def api_run():
     _return_401 = _secret_ok and not _match
     _relevant_headers = [k for k in getattr(request.headers, "keys", lambda: [])() if "run" in k.lower() or "secret" in k.lower()]
     import json as _json
+    _log_payload = _json.dumps({"hypothesisId": "H1", "message": "api_run auth check", "data": {"secret_configured": _secret_ok, "header_present": _header_present, "provided_len": _provided_len, "expected_len": _expected_len, "return_401": _return_401, "relevant_header_names": _relevant_headers}, "timestamp": __import__("time").time(), "location": "webhook_server.py:api_run"})
     try:
         _log_dir = __import__("os").path.dirname(_log_path)
         if _log_dir:
             __import__("os").makedirs(_log_dir, exist_ok=True)
         with open(_log_path, "a") as _f:
-            _f.write(_json.dumps({"hypothesisId": "H1", "message": "api_run auth check", "data": {"secret_configured": _secret_ok, "header_present": _header_present, "provided_len": _provided_len, "expected_len": _expected_len, "return_401": _return_401, "relevant_header_names": _relevant_headers}, "timestamp": __import__("time").time(), "location": "webhook_server.py:api_run"}) + "\n")
+            _f.write(_log_payload + "\n")
     except Exception:
         pass
+    __import__("sys").stderr.write("[DEBUG api_run] " + _log_payload + "\n")
     # #endregion
     if _secret_ok:
         provided = _provided
