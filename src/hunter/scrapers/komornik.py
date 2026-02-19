@@ -12,6 +12,7 @@ from loguru import logger
 from hunter.http_utils import DEFAULT_HEADERS, sync_get_with_retry
 from hunter.price_parser import price_pln_from_text
 from hunter.schema import normalized_listing
+from hunter.scrapers.common import is_likely_error_page
 
 # Oficjalny serwis Krajowej Rady Komorniczej — jedyne źródło dla tego scrapera
 BASE_URL = "https://licytacje.komornik.pl"
@@ -64,7 +65,12 @@ def _parse_list_page(
         if "licytacje.komornik.pl" not in full_url or "Details" not in full_url:
             continue
         title = (tds[3].get_text(strip=True) or "").strip() or "Licytacja komornicza"
-        items.append({"url": full_url, "title": title})
+        # Column 4 is "Miasto (Województwo)" e.g. "Suwałki  (podlaskie)" — extract region for frontend filtering
+        raw_miasto_woj = (tds[4].get_text(strip=True) or "")
+        region = None
+        if "(" in raw_miasto_woj and ")" in raw_miasto_woj:
+            region = raw_miasto_woj[raw_miasto_woj.index("(") + 1 : raw_miasto_woj.index(")")].strip()
+        items.append({"url": full_url, "title": title, "region": region})
     seen: set[str] = set()
     return [x for x in items if x["url"] not in seen and (seen.add(x["url"]) or True)]
 
@@ -90,6 +96,8 @@ def _parse_detail_page(html: str, url: str) -> Optional[dict[str, Any]]:
             raw["images"].append(urljoin(url, src))
 
     title = raw["title"] or "Licytacja komornicza"
+    if is_likely_error_page(raw["title"], raw["description"]):
+        return None
     price_pln = price_pln_from_text(raw["price"])
     location = (raw["location"] or "").strip() or "Polska"
     city = _extract_city(location)
@@ -147,13 +155,20 @@ def scrape_komornik(config: Optional[dict] = None) -> list[dict[str, Any]]:
                 resp = sync_get_with_retry(client, list_url, delay)
                 soup = BeautifulSoup(resp.text, "html.parser")
                 items = _parse_list_page(soup, BASE_URL, region_filter=region)
+                logger.info("Komornik list page {}: {} links", page, len(items))
                 if not items:
+                    if page == 1:
+                        logger.warning(
+                            "Komornik: no links on first page (check region or site structure)"
+                        )
                     break
                 for item in items:
                     try:
                         r = sync_get_with_retry(client, item["url"], delay)
                         row = _parse_detail_page(r.text, item["url"])
                         if row:
+                            if item.get("region") is not None:
+                                row["region"] = item["region"]
                             ad_str = row.get("auction_date")
                             if cutoff is not None and ad_str:
                                 try:

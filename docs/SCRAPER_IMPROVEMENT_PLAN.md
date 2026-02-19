@@ -2,6 +2,8 @@
 
 Prioritized, actionable plan to improve data quality, resilience, and coverage.
 
+**Done:** Phase 1.1, 1.2, 1.3, 2.2 (shared `is_likely_error_page` + use in both scrapers + komornik logging) and the defensive DB-level guard in `run.py` (filter before upsert).
+
 ---
 
 ## Current sources (recap)

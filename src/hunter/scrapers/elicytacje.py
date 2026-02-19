@@ -12,6 +12,7 @@ from loguru import logger
 from hunter.http_utils import DEFAULT_HEADERS, sync_get_with_retry
 from hunter.price_parser import price_pln_from_text
 from hunter.schema import normalized_listing
+from hunter.scrapers.common import is_likely_error_page
 
 # Official portal (Krajowa Rada Komornicza); elicytacje.ms.gov.pl no longer resolves
 BASE_URL = "https://elicytacje.komornik.pl"
@@ -72,6 +73,8 @@ def _parse_detail(html: str, url: str) -> Optional[dict[str, Any]]:
             raw["images"].append(urljoin(url, src))
 
     title = raw["title"] or "Licytacja sądowa"
+    if is_likely_error_page(raw["title"], raw["description"]):
+        return None
     price_pln = price_pln_from_text(raw["price"])
     location = (raw["location"] or "").strip() or "Polska"
     city = (location.split(",")[0].strip() if location else "Polska")

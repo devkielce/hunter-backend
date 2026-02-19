@@ -9,6 +9,7 @@ from loguru import logger
 from hunter.config import get_config
 from hunter.logging_config import setup_logging
 from hunter.schema import for_supabase
+from hunter.scrapers.common import is_likely_error_page
 from hunter.supabase_client import get_client, log_scrape_run, upsert_listings
 
 # Active scrapers only (e_licytacje, komornik; Facebook via webhook)
@@ -50,7 +51,17 @@ def run_scraper(
             log_scrape_run(client, name, started_at, finished_at, 0, 0, "success", None)
             return 0, 0, "success", None
 
-        prepared = [for_supabase(r) for r in rows]
+        # Defense-in-depth: skip any row that looks like an error page before upsert
+        rows_clean = [
+            r for r in rows
+            if not is_likely_error_page(r.get("title"), r.get("description"))
+        ]
+        if len(rows_clean) < len(rows):
+            logger.bind(source=name).warning(
+                "Skipped {} listing(s) as likely error pages before upsert",
+                len(rows) - len(rows_clean),
+            )
+        prepared = [for_supabase(r) for r in rows_clean]
         client = get_client()
         listings_upserted = upsert_listings(client, prepared)
         finished_at = datetime.now(timezone.utc).isoformat()
