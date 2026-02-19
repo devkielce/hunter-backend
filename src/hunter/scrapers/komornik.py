@@ -1,7 +1,7 @@
 """Bailiff auctions: licytacje.komornik.pl — httpx + BeautifulSoup."""
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 from urllib.parse import urljoin
 
@@ -121,17 +121,27 @@ def _extract_city(location: str) -> str:
 DEFAULT_KOMMORNIK_REGION = "świętokrzyskie"
 
 
+def _cutoff_for_days_back(days: int) -> Optional[datetime]:
+    """Return cutoff datetime (UTC) for listings older than this are skipped. None if days_back not used."""
+    if days is None or days <= 0:
+        return None
+    return datetime.now(timezone.utc) - timedelta(days=days)
+
+
 def scrape_komornik(config: Optional[dict] = None) -> list[dict[str, Any]]:
     cfg = config or {}
     scraping = cfg.get("scraping", {})
     delay = float(scraping.get("httpx_delay_seconds", 1.5))
     max_pages = int(scraping.get("max_pages_auctions", 50))
     region = (scraping.get("komornik_region") or DEFAULT_KOMMORNIK_REGION).strip() or None
+    days_back = scraping.get("days_back")
+    cutoff = _cutoff_for_days_back(int(days_back)) if days_back is not None else None
 
     results = []
     with httpx.Client(headers=DEFAULT_HEADERS, timeout=30.0, follow_redirects=True) as client:
         page = 1
-        while page <= max_pages:
+        stop_early = False
+        while page <= max_pages and not stop_early:
             list_url = f"{FILTER_NIERUCHOMOSCI}?page={page}" if page > 1 else FILTER_NIERUCHOMOSCI
             try:
                 resp = sync_get_with_retry(client, list_url, delay)
@@ -144,6 +154,17 @@ def scrape_komornik(config: Optional[dict] = None) -> list[dict[str, Any]]:
                         r = sync_get_with_retry(client, item["url"], delay)
                         row = _parse_detail_page(r.text, item["url"])
                         if row:
+                            ad_str = row.get("auction_date")
+                            if cutoff is not None and ad_str:
+                                try:
+                                    ad = datetime.fromisoformat(ad_str.replace("Z", "+00:00"))
+                                    if not ad.tzinfo:
+                                        ad = ad.replace(tzinfo=timezone.utc)
+                                    if ad.astimezone(timezone.utc) < cutoff:
+                                        stop_early = True
+                                        break
+                                except (ValueError, TypeError):
+                                    pass
                             results.append(row)
                     except Exception as e:
                         logger.warning("Skip listing {}: {}", item["url"], e)
