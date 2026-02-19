@@ -27,7 +27,7 @@ Zbieranie ofert z Facebooka przeniesione z frontendu do backendu. Apify po zako�
 The same webhook server exposes **`POST /api/run`** to trigger all scrapers on demand (e.g. from a refresh button in the frontend navbar). No body required. Response: `{ "ok": true, "results": [ { "source", "listings_found", "listings_upserted", "status", "error_message" } ] }`. The request runs synchronously (may take a minute); the frontend should show a loading state.
 
 - **Optional auth:** set `run_api.secret` in config (or use `apify.webhook_secret` as fallback) and send header **`X-Run-Secret: <secret>`**. If no secret is configured, the endpoint is open (suitable only behind a trusted proxy or same origin).
-- **CORS:** If the frontend calls the backend from another origin, enable CORS on the server or call `/api/run` from a Next.js API route (server-side) and have the navbar call that route instead.
+- **CORS:** If the frontend calls the backend from another origin, enable CORS on the server or call `/api/run` from a Next.js API route (server-side) and have the navbar call that route instead. See [docs/FRONTEND_API_RUN_PROXY.md](docs/FRONTEND_API_RUN_PROXY.md) for the exact proxy implementation and env vars.
 
 Szczegóły: pobieranie `GET https://api.apify.com/v2/datasets/{datasetId}/items?token=...`, filtrowanie (sprzedaż, cena, zł, nieruchomość, mieszkanie, dom, licytacja itd.), upsert po `source_url`; `source=facebook`, `price_pln`/`city`/`location` = null.
 
