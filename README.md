@@ -37,7 +37,7 @@ Szczegóły: pobieranie `GET https://api.apify.com/v2/datasets/{datasetId}/items
 - `title`, `description`, `price_pln` (grosze), `location`, `city`
 - `source`, `source_url` (unique, used for upsert)
 - `auction_date` (ISO UTC), `images[]`, `raw_data`
-- `region` (optional; Komornik sets województwo for frontend filtering)
+- `region` (optional; Komornik sets województwo for frontend filtering). If your Supabase `listings` table doesn’t have a `region` column yet, the backend retries the upsert without it so the run still succeeds; add `region` (text) in the table to persist it.
 
 ## Setup
 

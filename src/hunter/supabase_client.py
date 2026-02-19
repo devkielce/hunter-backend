@@ -20,6 +20,11 @@ def get_client():
     return create_client(url, key)
 
 
+def _rows_without_region(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Return copies of rows with 'region' key removed (for DBs that don't have the column yet)."""
+    return [{k: v for k, v in r.items() if k != "region"} for r in rows]
+
+
 def upsert_listings(client: Any, rows: list[dict[str, Any]]) -> int:
     """Idempotent upsert by source_url (no select-before-insert). Preserves status/notified."""
     if not rows:
@@ -34,6 +39,21 @@ def upsert_listings(client: Any, rows: list[dict[str, Any]]) -> int:
         logger.info("Upserted {} listings", count)
         return count
     except Exception as e:
+        err_msg = str(e) if e else ""
+        # Table may not have 'region' column yet (PGRST204). Retry without region so upsert succeeds.
+        if "PGRST204" in err_msg and "region" in err_msg.lower():
+            logger.warning(
+                "Supabase listings table has no 'region' column; retrying upsert without region. "
+                "Add column 'region' (text) to persist region for frontend filtering."
+            )
+            result = (
+                client.table(LISTINGS_TABLE)
+                .upsert(_rows_without_region(rows), on_conflict="source_url")
+                .execute()
+            )
+            count = len(result.data) if result.data is not None else len(rows)
+            logger.info("Upserted {} listings (without region)", count)
+            return count
         logger.exception("Supabase upsert failed: {}", e)
         raise
 

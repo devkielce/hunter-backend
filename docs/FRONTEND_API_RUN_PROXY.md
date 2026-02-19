@@ -210,8 +210,8 @@ scraping:
 
 When the user clicks "Odśwież oferty", the backend uses **10 list pages** per source instead of 50, so the run finishes in a few minutes and is less likely to be killed. **Full scrape** (e.g. 50 pages) still runs when you use the **scheduler** or `hunter run-all` in CLI.
 
-**Fix 2 – Full scrape via Railway Cron**  
-Run the full scrape in a **separate job** that isn’t tied to the web request: e.g. Railway Cron (or another scheduler) that runs `hunter run-all` on a schedule. That job runs to completion. The button can keep using the shorter `on_demand_max_pages_auctions` for a quick refresh.
+**Fix 2 – Full scrape via Railway Cron (runs as long as needed)**  
+Run the full scrape in a **separate Railway service** that is triggered by a **Cron Schedule**. That job runs in its own execution, runs to completion, then exits. The web container is not involved, so it is not stopped. See **[docs/RAILWAY_CRON_FULL_SCRAPE.md](RAILWAY_CRON_FULL_SCRAPE.md)** for step-by-step setup.
 
 ---
 
