@@ -24,7 +24,7 @@ Zbieranie ofert z Facebooka przeniesione z frontendu do backendu. Apify po zako�
 
 ## On-demand run (navbar refresh)
 
-The same webhook server exposes **`POST /api/run`** to trigger all scrapers on demand (e.g. from a refresh button in the frontend navbar). No body required. Response: `{ "ok": true, "results": [ { "source", "listings_found", "listings_upserted", "status", "error_message" } ] }`. The request runs synchronously (may take a minute); the frontend should show a loading state.
+The same webhook server exposes **`POST /api/run`** to trigger all scrapers on demand (e.g. “Odśwież oferty”). No body required. Returns **202 Accepted** and runs scrapers in the background; frontend should poll **`GET /api/run/status`** until `status` is `completed` or `error`, then refresh listings.
 
 - **Optional auth:** set `run_api.secret` in config (or use `apify.webhook_secret` as fallback) and send header **`X-Run-Secret: <secret>`**. If no secret is configured, the endpoint is open (suitable only behind a trusted proxy or same origin).
 - **CORS:** If the frontend calls the backend from another origin, enable CORS on the server or call `/api/run` from a Next.js API route (server-side) and have the navbar call that route instead. See [docs/FRONTEND_API_RUN_PROXY.md](docs/FRONTEND_API_RUN_PROXY.md) for the exact proxy implementation and env vars.
@@ -36,6 +36,7 @@ Szczegóły: pobieranie `GET https://api.apify.com/v2/datasets/{datasetId}/items
 - `title`, `description`, `price_pln` (grosze), `location`, `city`
 - `source`, `source_url` (unique, used for upsert)
 - `auction_date` (ISO UTC), `images[]`, `raw_data`
+- `region` (optional; Komornik sets województwo for frontend filtering)
 
 ## Setup
 
