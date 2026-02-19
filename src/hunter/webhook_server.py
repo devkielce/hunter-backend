@@ -102,6 +102,11 @@ def _run_scrapers_background() -> None:
     from hunter.scrapers import scrape_komornik, scrape_elicytacje
     try:
         cfg = get_config()
+        # When triggered via API, use shorter page limit so run finishes before container may stop (Railway etc.)
+        scraping = cfg.get("scraping", {})
+        on_demand_pages = scraping.get("on_demand_max_pages_auctions")
+        if on_demand_pages is not None:
+            cfg = {**cfg, "scraping": {**scraping, "max_pages_auctions": int(on_demand_pages)}}
         all_scrapers = [
             ("komornik", scrape_komornik),
             ("e_licytacje", scrape_elicytacje),

@@ -195,6 +195,26 @@ Optional: **APIFY_TOKEN** (for Apify Facebook flow). Scraping options (e.g. `max
 
 ---
 
+## Container stops before run completes (e.g. Railway)
+
+If the backend returns **202** but the run never finishes (logs show "Stopping Container" or the process is recycled), the **background thread** that runs the scrapers is killed when the container stops. The DB is not updated.
+
+**Fix 1 – Shorter on-demand runs (recommended)**  
+In backend config (e.g. `config.yaml` or, on Railway, ensure your deployed config includes this), set:
+
+```yaml
+scraping:
+  max_pages_auctions: 50      # full scrape (scheduler / CLI)
+  on_demand_max_pages_auctions: 10   # when triggered via POST /api/run
+```
+
+When the user clicks "Odśwież oferty", the backend uses **10 list pages** per source instead of 50, so the run finishes in a few minutes and is less likely to be killed. **Full scrape** (e.g. 50 pages) still runs when you use the **scheduler** or `hunter run-all` in CLI.
+
+**Fix 2 – Full scrape via Railway Cron**  
+Run the full scrape in a **separate job** that isn’t tied to the web request: e.g. Railway Cron (or another scheduler) that runs `hunter run-all` on a schedule. That job runs to completion. The button can keep using the shorter `on_demand_max_pages_auctions` for a quick refresh.
+
+---
+
 ## Why you get 500
 
 - **BACKEND_URL** or **HUNTER_RUN_SECRET** missing in Vercel → proxy returns 500 or backend returns 401.

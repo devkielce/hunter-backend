@@ -20,6 +20,7 @@ Zbieranie ofert z Facebooka przeniesione z frontendu do backendu. Apify po zako�
 
 - **Konfiguracja:** `apify.token` (lub `APIFY_TOKEN`), opcjonalnie `apify.webhook_secret` (lub `APIFY_WEBHOOK_SECRET`) do weryfikacji webhooka.
 - **Endpoint:** `POST /webhook/apify` — body (JSON): `datasetId` lub `resource.defaultDatasetId`; nagłówek `x-apify-webhook-secret` jeśli ustawiony.
+- **Kiedy i jak wywoływany:** Apify **uruchamia aktora** według harmonogramu lub ręcznie (w Apify Console). Po zakończeniu runu Apify wywołuje webhook na backend; backend pobiera dataset z Apify API i zapisuje do Supabase. Szczegóły: [docs/APIFY_WEBHOOK_FLOW.md](docs/APIFY_WEBHOOK_FLOW.md).
 - **Uruchomienie serwera:** `hunter webhook` (domyślnie port 5000; zmienne `PORT`, `HOST`).
 
 ## On-demand run (navbar refresh)
