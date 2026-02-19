@@ -19,8 +19,9 @@ def normalized_listing(
     auction_date: Optional[datetime] = None,
     images: Optional[list[str]] = None,
     raw_data: Optional[dict[str, Any]] = None,
+    region: Optional[str] = None,
 ) -> dict[str, Any]:
-    """Build a normalized listing dict. price_pln in grosze."""
+    """Build a normalized listing dict. price_pln in grosze. region = województwo for frontend filtering."""
     return {
         "title": title,
         "description": description or None,
@@ -32,6 +33,7 @@ def normalized_listing(
         "auction_date": auction_date.isoformat() if auction_date else None,
         "images": images or [],
         "raw_data": raw_data or {},
+        "region": region,
     }
 
 
