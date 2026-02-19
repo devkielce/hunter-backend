@@ -114,6 +114,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
 - **BACKEND_URL** or **HUNTER_RUN_SECRET** missing in Vercel → proxy returns 500 or backend returns 401.
 - Proxy route missing or wrong path → Vercel may return 500 or 404.
+- **Backend (Railway) error:** config missing (e.g. Supabase URL/key), scraper failure, or DB error. The backend now returns 500 with a JSON body: `{ "ok": false, "error": "<message>" }`. Check the response body in the browser Network tab or in the frontend proxy (e.g. log `data.error` when status is 500). Also check Railway → service → Logs for the full traceback.
 - After adding the route and env vars, **redeploy** the frontend on Vercel.
 
 ---

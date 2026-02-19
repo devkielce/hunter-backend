@@ -18,7 +18,7 @@ DEFAULT_HEADERS = {
     "Accept-Language": "pl-PL,pl;q=0.9,en;q=0.8",
 }
 
-DEFAULT_TIMEOUT = 20.0
+DEFAULT_TIMEOUT = 45.0  # auction sites (e.g. elicytacje.komornik.pl) can be slow
 MAX_RETRIES = 3
 RETRY_BACKOFF_BASE = 1.0  # seconds
 

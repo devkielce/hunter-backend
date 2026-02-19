@@ -78,35 +78,39 @@ def api_run():
     Optional auth: set config run_api_secret and send header X-Run-Secret.
     Returns per-source results (listings_found, listings_upserted, status).
     """
-    setup_logging(get_config())
-    cfg = get_config()
-    secret = (cfg.get("run_api") or {}).get("secret") or (cfg.get("apify", {}) or {}).get("webhook_secret")
-    if secret and isinstance(secret, str) and secret.strip():
-        provided = request.headers.get("x-run-secret") or request.headers.get("X-Run-Secret")
-        if provided != secret.strip():
-            return jsonify({"error": "Unauthorized"}), 401
-    from hunter.run import run_scraper
-    from hunter.scrapers import scrape_komornik, scrape_elicytacje
-    all_scrapers = [
-        ("komornik", scrape_komornik),
-        ("e_licytacje", scrape_elicytacje),
-    ]
-    sources = cfg.get("scraping", {}).get("sources")
-    if sources:
-        scrapers = [(n, fn) for n, fn in all_scrapers if n in sources]
-    else:
-        scrapers = all_scrapers
-    results = []
-    for name, fn in scrapers:
-        found, upserted, status, err = run_scraper(name, fn, cfg, dry_run=False)
-        results.append({
-            "source": name,
-            "listings_found": found,
-            "listings_upserted": upserted,
-            "status": status,
-            "error_message": err,
-        })
-    return jsonify({"ok": True, "results": results}), 200
+    try:
+        setup_logging(get_config())
+        cfg = get_config()
+        secret = (cfg.get("run_api") or {}).get("secret") or (cfg.get("apify", {}) or {}).get("webhook_secret")
+        if secret and isinstance(secret, str) and secret.strip():
+            provided = request.headers.get("x-run-secret") or request.headers.get("X-Run-Secret")
+            if provided != secret.strip():
+                return jsonify({"error": "Unauthorized"}), 401
+        from hunter.run import run_scraper
+        from hunter.scrapers import scrape_komornik, scrape_elicytacje
+        all_scrapers = [
+            ("komornik", scrape_komornik),
+            ("e_licytacje", scrape_elicytacje),
+        ]
+        sources = cfg.get("scraping", {}).get("sources")
+        if sources:
+            scrapers = [(n, fn) for n, fn in all_scrapers if n in sources]
+        else:
+            scrapers = all_scrapers
+        results = []
+        for name, fn in scrapers:
+            found, upserted, status, err = run_scraper(name, fn, cfg, dry_run=False)
+            results.append({
+                "source": name,
+                "listings_found": found,
+                "listings_upserted": upserted,
+                "status": status,
+                "error_message": err,
+            })
+        return jsonify({"ok": True, "results": results}), 200
+    except Exception as e:
+        logger.exception("POST /api/run failed: {}", e)
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 
 @app.route("/health", methods=["GET"])

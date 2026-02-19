@@ -106,7 +106,7 @@ def scrape_elicytacje(config: Optional[dict] = None) -> list[dict[str, Any]]:
     cutoff = _cutoff_for_days_back(int(days_back)) if days_back is not None else None
 
     results = []
-    with httpx.Client(headers=DEFAULT_HEADERS, timeout=30.0, follow_redirects=True) as client:
+    with httpx.Client(headers=DEFAULT_HEADERS, timeout=60.0, follow_redirects=True) as client:
         page = 1
         stop_early = False
         while page <= max_pages and not stop_early:
