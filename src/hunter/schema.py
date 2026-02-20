@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal, Optional
 
-SOURCE_LITERAL = Literal["komornik", "e_licytacje", "olx", "otodom", "gratka", "facebook"]
+SOURCE_LITERAL = Literal["komornik", "e_licytacje", "amw", "olx", "otodom", "gratka", "facebook"]
 
 
 def normalized_listing(

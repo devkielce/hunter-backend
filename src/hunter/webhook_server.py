@@ -104,7 +104,7 @@ ON_DEMAND_MAX_LISTINGS = 20
 def _run_scrapers_background() -> None:
     """Run all scrapers and update _run_state when done. Runs in a daemon thread."""
     from hunter.run import run_scraper
-    from hunter.scrapers import scrape_komornik, scrape_elicytacje
+    from hunter.scrapers import scrape_komornik, scrape_elicytacje, scrape_amw
     try:
         cfg = get_config()
         # When triggered via API (Odśwież oferty), limit pages and total listings; daily/cron scrape is unaffected.
@@ -120,6 +120,7 @@ def _run_scrapers_background() -> None:
         all_scrapers = [
             ("komornik", scrape_komornik),
             ("e_licytacje", scrape_elicytacje),
+            ("amw", scrape_amw),
         ]
         sources = cfg.get("scraping", {}).get("sources")
         scrapers = [(n, fn) for n, fn in all_scrapers if n in sources] if sources else all_scrapers

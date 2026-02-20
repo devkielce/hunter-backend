@@ -12,8 +12,8 @@ from hunter.schema import for_supabase
 from hunter.scrapers.common import is_likely_error_page
 from hunter.supabase_client import get_client, log_scrape_run, upsert_listings
 
-# Active scrapers only (e_licytacje, komornik; Facebook via webhook)
-SCRAPER_NAMES = ["komornik", "e_licytacje"]
+# Active scrapers only (e_licytacje, komornik, amw; Facebook via webhook)
+SCRAPER_NAMES = ["komornik", "e_licytacje", "amw"]
 
 
 def run_scraper(
@@ -88,13 +88,14 @@ def run_scraper(
 
 
 def run_all(config: Optional[dict] = None, dry_run: bool = False) -> None:
-    """Run scrapers in sequence. Only komornik and e_licytacje; config.scraping.sources can restrict further."""
-    from hunter.scrapers import scrape_komornik, scrape_elicytacje
+    """Run scrapers in sequence. komornik, e_licytacje, amw; config.scraping.sources can restrict further."""
+    from hunter.scrapers import scrape_komornik, scrape_elicytacje, scrape_amw
     cfg = config or get_config()
     setup_logging(cfg)
     all_scrapers = [
         ("komornik", scrape_komornik),
         ("e_licytacje", scrape_elicytacje),
+        ("amw", scrape_amw),
     ]
     sources = cfg.get("scraping", {}).get("sources")
     if sources:
@@ -108,13 +109,14 @@ def run_all(config: Optional[dict] = None, dry_run: bool = False) -> None:
 
 
 def run_one(source: str, config: Optional[dict] = None, dry_run: bool = False) -> None:
-    """Run a single scraper by name (komornik or e_licytacje)."""
-    from hunter.scrapers import scrape_komornik, scrape_elicytacje
+    """Run a single scraper by name (komornik, e_licytacje, or amw)."""
+    from hunter.scrapers import scrape_komornik, scrape_elicytacje, scrape_amw
     cfg = config or get_config()
     setup_logging(cfg)
     map_fn = {
         "komornik": scrape_komornik,
         "e_licytacje": scrape_elicytacje,
+        "amw": scrape_amw,
     }
     fn = map_fn.get(source)
     if not fn:

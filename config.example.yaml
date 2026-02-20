@@ -16,8 +16,8 @@ scraping:
   on_demand_max_listings: 20
   # Optional: only keep listings with auction_date in the last N days; stops pagination when older. Omit for full scrape.
   # days_back: 1
-  # Active sources: komornik, e_licytacje (Facebook via webhook). Omit or [] to run both.
-  sources: ["komornik", "e_licytacje"]
+  # Active sources: komornik, e_licytacje, amw (Facebook via webhook). Omit or [] to run all.
+  sources: ["komornik", "e_licytacje", "amw"]
   # Komornik: "" = all regions (each listing has region label for frontend filter). Set e.g. "świętokrzyskie" to limit.
   komornik_region: ""
   # E-licytacje: same as komornik — "" = all regions; set e.g. "świętokrzyskie" to limit. Region is parsed from detail (location parentheses).

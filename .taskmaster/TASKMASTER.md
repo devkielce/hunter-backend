@@ -14,6 +14,8 @@ Single source of truth for the **Hunter** system: app description, architecture,
 
 **Active sources:** komornik, e_licytacje, Facebook (Apify). OLX, Otodom, Gratka are disabled in config but code remains.
 
+**Region:** Backend scrapes **all regions** by default (`komornik_region: ""`, `e_licytacje_region: ""`). Optional config: e.g. `komornik_region: "świętokrzyskie"` to limit. Each Komornik listing has a `region` (województwo) for frontend filtering; the frontend dashboard may describe or filter by a specific region (e.g. Kielce) in the UI.
+
 ---
 
 ## 2. Architecture
@@ -100,7 +102,7 @@ Single source of truth for the **Hunter** system: app description, architecture,
 | Method | Path | Purpose |
 |--------|------|---------|
 | POST | `/webhook/apify` | Apify calls when Facebook actor run succeeds. Body: `datasetId` or `resource.defaultDatasetId`. Header (optional): `x-apify-webhook-secret`. |
-| POST | `/api/run` | Start scrapers in background. Returns 202. Header (if configured): `X-Run-Secret`. |
+| POST | `/api/run` | Start scrapers in background. Returns 202. **No body required** (overrides come from backend config: `on_demand_max_pages_auctions`, etc.). Header (if configured): `X-Run-Secret`. |
 | GET | `/api/run/status` | Poll until `status` is `completed` or `error`. Same `X-Run-Secret`. |
 
 ### Config
@@ -118,12 +120,61 @@ Single source of truth for the **Hunter** system: app description, architecture,
 
 ---
 
-## 5. Frontend alignment
+## 5. Frontend (Hunter dashboard) — summary from frontend taskmaster
+
+The frontend is a **separate repo**. This section summarizes its view for alignment; details live in the frontend’s taskmaster and ALIGNMENT.md.
+
+### Frontend tech stack
+
+| Layer | Choice |
+|-------|--------|
+| Framework | Next.js 15 (App Router) |
+| React | React 19 |
+| Language | TypeScript |
+| Styling | Tailwind CSS |
+| Data | Supabase (service role for server-side listing fetch) |
+| E-mail | Resend (digest) |
+| Hosting | Vercel (cron for digest; optional fallback for Apify webhook) |
+
+### Frontend routes (for reference)
+
+| Route | Description |
+|-------|-------------|
+| `GET /` | Home; link to dashboard |
+| `GET /dashboard` | Main dashboard: listings, filters, statuses, “Odśwież oferty” |
+| `PATCH /api/listings/[id]` | Update listing status (frontend; backend does not touch status) |
+| `POST /api/run` | **Proxy** to backend `POST /api/run` (on-demand scrape) |
+| `GET /api/run/status` | **Proxy** to backend (poll until completed/error) |
+| `POST /api/apify/webhook` | Apify webhook **fallback** (primary: backend `POST /webhook/apify`) |
+| `GET /api/cron/notify` | Daily digest cron (e.g. 8:00 UTC); Resend; sets `notified = true` |
+
+**Apify URL in production:** Prefer backend: `https://hunter.willonski.com/webhook/apify`. Fallback (if used): frontend `https://hunter.willonski.com/api/apify/webhook`. Same header `x-apify-webhook-secret` for both.
+
+### Frontend structure (key files)
+
+- `src/app/layout.tsx` – Root layout (hydration/extension workarounds, Geist fonts).
+- `src/app/dashboard/page.tsx` – Server component: fetches listings (4 sources merged), normalizes, passes to dashboard.
+- `src/components/ListingDashboard.tsx` – Client: filters, sort, cards grid, status PATCH.
+- `src/components/ListingCard.tsx` – Client: card UI, countdown, “NOWE (dzisiaj)”, `suppressHydrationWarning` on time-dependent blocks.
+- `RefreshScrapersButtonDynamic` – Client wrapper with `next/dynamic` (ssr: false) for “Odśwież oferty”.
+
+### Frontend done (✅) and optional (🔜)
+
+- **Done:** Next 15, React 19, dashboard with cards/filters/status/countdown/“NOWE (dzisiaj)”/link to offer, Apify fallback webhook, cron digest, Supabase schema alignment, hydration fixes, proxy for `/api/run` and `/api/run/status`.
+- **Optional later:** Realtime (Supabase subscription), server-side filters, filters in alert_rules, auth/RLS, table view, alert_rules UI.
+
+### Frontend deployment & env (Vercel)
+
+- **Env:** `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `RESEND_API_KEY`, `DIGEST_FROM_EMAIL`, `CRON_SECRET`, `BACKEND_URL`, `HUNTER_RUN_SECRET`; optionally `APIFY_TOKEN`, `APIFY_WEBHOOK_SECRET` (for fallback webhook).
+- **Cron:** `GET /api/cron/notify` with `Authorization: Bearer <CRON_SECRET>` (e.g. 8:00 UTC in vercel.json).
+
+### Backend ↔ frontend alignment (this repo)
 
 - **Same Supabase project.** Backend uses service role; frontend anon + service role for API routes.
-- **Facebook:** Backend owns ingestion via `/webhook/apify`. Frontend can drop Apify webhook or keep as fallback.
-- **Run refresh:** Frontend calls **Vercel** API routes that proxy to backend `POST /api/run` and `GET /api/run/status` with `X-Run-Secret` (value = `HUNTER_RUN_SECRET` on Vercel = `APIFY_WEBHOOK_SECRET` on backend).
-- **Vercel env:** `BACKEND_URL` (Railway base URL), `HUNTER_RUN_SECRET`.
+- **Facebook:** Backend owns ingestion via `POST /webhook/apify`. Frontend may keep `POST /api/apify/webhook` as fallback.
+- **Run refresh:** Frontend proxies to backend `POST /api/run` and `GET /api/run/status` with `X-Run-Secret` (= `HUNTER_RUN_SECRET` on Vercel = `APIFY_WEBHOOK_SECRET` on backend).
+- **POST /api/run:** Backend expects **no body**; overrides (e.g. `on_demand_max_pages_auctions`) come from backend config only. If the frontend repo documents body params (e.g. `days_back`, `max_pages_auctions`), that is not implemented in the backend yet.
+- **Schema:** Both use **`supabase_schema.sql`** (this repo) as single source of truth. Frontend may keep a copy (e.g. `supabase-schema.sql`) in sync.
 - **Dates:** Use `listing.auction_date \|\| listing.created_at` for display; normalize with `row.created_at != null ? String(row.created_at).trim() : null`; never `String(undefined)`. See docs/DATE_NOT_RENDERING.md and docs/FRONTEND_RENDER_SNIPPET.md.
 
 ---
@@ -169,17 +220,22 @@ See **docs/APIFY_WEBHOOK_FLOW.md** and **docs/APIFY_INTEGRATION_CHECKLIST.md**.
 | **docs/SCRAPER_IMPROVEMENT_PLAN.md** | Scraper improvements and plan. |
 | **CHANGELOG.md** | Version history and notable changes. |
 
+**Frontend repo (separate):** The frontend has its own taskmaster, README, ALIGNMENT.md, and docs (e.g. DATA_IN_DB_NOT_IN_APP, BACKEND_RUN_OPTIONS.md, BACKEND_ASYNC_RUN.md, HYDRATION_DEBUG.md, FRONTEND_RENDER_SNIPPET.md). Schema alignment: use this repo’s **supabase_schema.sql** as the single source of truth; frontend ALIGNMENT.md should match FRONTEND_ALIGNMENT.md and the schema here.
+
 ---
 
 ## 9. Quick reference
 
 | Item | Value |
 |------|--------|
-| **Backend webhook URL** | `https://hunter.willonski.com/webhook/apify` (or your deployment) |
-| **Run API** | POST `.../api/run`, GET `.../api/run/status`; header `X-Run-Secret` |
-| **Schema source of truth** | `supabase_schema.sql` |
+| **Dashboard (frontend)** | `https://hunter.willonski.com/dashboard` (Vercel) |
+| **Backend webhook URL** | `https://hunter.willonski.com/webhook/apify` (or your backend deployment) |
+| **Apify fallback (frontend)** | `https://hunter.willonski.com/api/apify/webhook` (optional) |
+| **Run API** | POST `.../api/run`, GET `.../api/run/status`; header `X-Run-Secret`; no body |
+| **Schema source of truth** | `supabase_schema.sql` (this repo) |
 | **Backend env (production)** | SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, APIFY_WEBHOOK_SECRET, APIFY_TOKEN (optional), PORT |
 | **Frontend proxy env** | BACKEND_URL, HUNTER_RUN_SECRET (= APIFY_WEBHOOK_SECRET on backend) |
+| **Digest cron** | Frontend: GET /api/cron/notify (e.g. 8:00 UTC). Backend: scheduler 8:00 Europe/Warsaw (optional). |
 
 ---
 

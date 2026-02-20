@@ -15,7 +15,7 @@ def main() -> None:
     run_one_parser = sub.add_parser("run", help="Run a single scraper")
     run_one_parser.add_argument(
         "source",
-        choices=["komornik", "e_licytacje"],
+        choices=["komornik", "e_licytacje", "amw"],
         help="Source to scrape",
     )
     run_one_parser.add_argument("--dry-run", action="store_true", help="Scrape only, no Supabase")
