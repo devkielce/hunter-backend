@@ -139,6 +139,7 @@ def process_apify_dataset(
     cfg = config or get_config()
     token = _get_apify_token(cfg)
     raw_items = fetch_dataset_items(dataset_id, token)
+    logger.info("Apify Facebook: fetched {} raw items for dataset_id={}", len(raw_items), dataset_id)
     rows = []
     for item in raw_items:
         try:

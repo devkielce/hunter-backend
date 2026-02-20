@@ -70,6 +70,7 @@ def webhook_apify():
         return jsonify({"error": "Content-Type must be application/json"}), 400
     body = request.get_json(silent=True) or {}
     dataset_id = _dataset_id_from_payload(body)
+    logger.info("Apify webhook received, dataset_id={}", dataset_id or "(missing)")
     if not dataset_id:
         logger.warning("Apify webhook: no datasetId or resource.defaultDatasetId in body")
         return jsonify({"error": "Missing datasetId or resource.defaultDatasetId"}), 400
