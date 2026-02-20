@@ -18,11 +18,12 @@ type Listing = {
   source: string;
   source_url: string;
   auction_date: string | null;  // ISO 8601
-  created_at: string;
-  updated_at: string;
+  created_at: string | null;
+  updated_at: string | null;
   images: string[];
   status: string;
   region?: string;  // optional, from Komornik
+  notified?: boolean;
 };
 ```
 
@@ -38,6 +39,49 @@ const { data: listings } = await supabase
   .select('id, title, description, price_pln, location, city, source, source_url, auction_date, created_at, updated_at, images, status, region')
   .order('created_at', { ascending: false });
 ```
+
+---
+
+## Normalize listing (defensive)
+
+If you normalize Supabase rows before passing to the UI, **never** use `String(row.created_at)` when the value can be undefined — that becomes the literal string `"undefined"` and breaks date rendering (see [DATE_NOT_RENDERING.md](./DATE_NOT_RENDERING.md#6-normalization-turns-undefined-into-the-string-undefined-silent)). Use this robust version:
+
+```ts
+function normalizeListing(row: Record<string, unknown>): Listing {
+  const created =
+    row.created_at != null ? String(row.created_at).trim() : null;
+
+  const updated =
+    row.updated_at != null ? String(row.updated_at).trim() : null;
+
+  return {
+    id: String(row.id),
+    source: String(row.source ?? ""),
+    source_url: String(row.source_url ?? ""),
+    title: String(row.title ?? ""),
+    description: row.description != null ? String(row.description) : null,
+    price_pln: row.price_pln != null ? Number(row.price_pln) : null,
+    city: row.city != null ? String(row.city) : null,
+    location: row.location != null ? String(row.location) : null,
+    images: Array.isArray(row.images) ? (row.images as string[]) : [],
+    status:
+      row.status != null && typeof row.status === "string"
+        ? (row.status as Listing["status"])
+        : "new",
+    auction_date: (() => {
+      const v = row.auction_date;
+      if (v == null) return null;
+      const s = String(v).trim();
+      return s === "" ? null : s;
+    })(),
+    created_at: created,
+    updated_at: updated,
+    notified: Boolean(row.notified),
+  };
+}
+```
+
+If dates still don't render after this, add temporarily: `console.log("RAW ROW:", row)` and check what Supabase actually returned.
 
 ---
 

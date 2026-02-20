@@ -82,6 +82,31 @@ The date might only render when e.g. `source === 'komornik'` or `listing.auction
 
 ---
 
+### 6. Normalization turns `undefined` into the string `"undefined"` (silent)
+
+If you normalize Supabase rows with something like:
+
+```ts
+created_at: String(row.created_at),
+updated_at: String(row.updated_at),
+```
+
+then when `row.created_at` or `row.updated_at` is **undefined** (e.g. RLS, typo, column missing from select, or row created before column existed), `String(undefined)` becomes the **literal string** `"undefined"`. Then:
+
+- `new Date("undefined")` → **Invalid Date**
+- `isNaN(d.getTime()) === true` → your fallback sets `dateStr = null` → nothing renders. No error, no crash.
+
+**Fix:** Never blindly stringify; guard on null/undefined:
+
+```ts
+created_at: row.created_at != null ? String(row.created_at) : null,
+updated_at: row.updated_at != null ? String(row.updated_at) : null,
+```
+
+And use a **defensive `normalizeListing`** for all fields (see [FRONTEND_RENDER_SNIPPET.md](./FRONTEND_RENDER_SNIPPET.md#normalize-listing-defensive)). If dates still don't render after that, log the raw row (`console.log("RAW ROW:", row)`) to confirm what Supabase actually returned.
+
+---
+
 ## How to find the bug
 
 1. **Supabase Table Editor**  
@@ -112,6 +137,7 @@ The date might only render when e.g. `source === 'komornik'` or `listing.auction
 | null not handled   | Check for null/undefined before formatting; show “–” or “Brak daty” when missing. |
 | String not parsed  | Use `new Date(listing.auction_date)` before formatting or passing to a library. |
 | Condition too strict | Relax or fix the condition that decides when to show the date. |
+| Normalization: `String(undefined)` → `"undefined"` | Use `row.created_at != null ? String(row.created_at) : null` (and same for `updated_at`). Use defensive `normalizeListing`. |
 
 Checking the API response (Network tab) and the exact property used in the component usually pinpoints the issue even when there are no errors.
 
