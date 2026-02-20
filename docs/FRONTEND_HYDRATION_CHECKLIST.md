@@ -25,10 +25,32 @@ After fixing obvious hydration issues (e.g. `useMounted()` for time-based UI), i
 
 ---
 
-## 4. Time/locale in helpers during initial render
+## 4. Date formatting (najczęstsza przyczyna hydration)
 
-- Helpers that use `new Date()`, `Date.now()`, `toLocale*`, `Intl.*` must only run **after** `mounted` (or inside client-only code).
-- Search for `new Date(`, `Date.now(`, `toLocale`, `Intl.` and ensure none run during first render.
+**Problem:** "External changing data without sending a snapshot" — serwer i klient formatują datę inaczej (locale, timezone), więc HTML się różni.
+
+**Unikaj w pierwszym renderze (SSR):**
+```js
+// ❌ Źle — brak locale = zależne od środowiska (serwer vs przeglądarka)
+new Date(listing.created_at).toLocaleDateString()
+
+// ❌ Ryzykowne — nawet z locale serwer (Node) i klient mogą dać inny output
+new Date(listing.created_at).toLocaleDateString('pl-PL', { dateStyle: 'medium' })
+```
+
+**Rozwiązania (wybierz jedno):**
+
+1. **Format deterministyczny** (ten sam na serwerze i kliencie):
+```js
+// ✅ Deterministic
+new Date(listing.created_at).toISOString().slice(0, 10)  // "2026-02-20"
+// lub stałe opcje locale + timeZone (np. 'Europe/Warsaw')
+new Date(listing.created_at).toLocaleDateString('pl-PL', { timeZone: 'Europe/Warsaw', dateStyle: 'medium' })
+```
+
+2. **Datę formatuj tylko po stronie klienta** (np. wewnątrz komponentu gated by `useMounted()`): na serwerze pokazuj placeholder (np. `"—"` lub ISO), po mount dopisz `toLocaleDateString('pl-PL', { ... })`.
+
+Nie używaj `Date.now()` ani `Math.random()` w key ani w treści podczas pierwszego renderu.
 
 ---
 

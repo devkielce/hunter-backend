@@ -154,6 +154,18 @@ function ListingCard({ listing }: { listing: Listing }) {
 
 ---
 
+## Hydration: formatowanie dat
+
+Jeśli pojawia się **hydration error** (#418 / #423), najczęściej winne jest formatowanie dat: serwer i klient zwracają inny string (locale/timezone).
+
+- **Unikaj** w komponencie renderowanym także na serwerze: `new Date(...).toLocaleDateString()` bez jawnego locale, albo bez stałego `timeZone`.
+- **Bezpieczne:** format deterministyczny, np. `new Date(displayDate).toISOString().slice(0, 10)` albo formatowanie daty **tylko po mount** (w komponencie z `useMounted()`).
+- Szukaj w kodzie: `toLocaleDateString`, `toLocaleString`, `Intl.`, `Date.now()` — żadne z nich nie powinno dawać innego wyniku na serwerze i kliencie w pierwszym renderze.
+
+Szczegóły: [FRONTEND_HYDRATION_CHECKLIST.md](./FRONTEND_HYDRATION_CHECKLIST.md) (sekcja 4).
+
+---
+
 ## Notes
 
 - Use **snake_case** from the API: `listing.auction_date`, `listing.created_at`, `listing.price_pln`.
