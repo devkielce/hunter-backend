@@ -20,6 +20,8 @@ scraping:
   sources: ["komornik", "e_licytacje"]
   # Komornik: "" = all regions (each listing has region label for frontend filter). Set e.g. "świętokrzyskie" to limit.
   komornik_region: ""
+  # E-licytacje: same as komornik — "" = all regions; set e.g. "świętokrzyskie" to limit. Region is parsed from detail (location parentheses).
+  e_licytacje_region: ""
 
 # Apify (Facebook): token do pobierania datasetów; webhook_secret do weryfikacji POST /webhook/apify
 apify:

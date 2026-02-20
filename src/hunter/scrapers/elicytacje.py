@@ -34,6 +34,23 @@ def _parse_auction_date(text: Optional[str]) -> Optional[datetime]:
     return None
 
 
+def _extract_city(location: str) -> str:
+    """Heuristic: first comma-separated part or whole if short (same as komornik)."""
+    if not location:
+        return "Polska"
+    parts = [p.strip() for p in location.split(",")]
+    return parts[0] if parts else location
+
+
+def _extract_region_from_location(location: str) -> Optional[str]:
+    """Extract województwo from location e.g. 'Kielce (świętokrzyskie)' -> 'świętokrzyskie'."""
+    if not location or "(" not in location or ")" not in location:
+        return None
+    start = location.index("(") + 1
+    end = location.index(")")
+    return location[start:end].strip() or None
+
+
 def _parse_list_page(soup: BeautifulSoup, base: str) -> list[dict[str, str]]:
     items = []
     for a in soup.select("a[href*='/licytacje/']"):
@@ -77,7 +94,8 @@ def _parse_detail(html: str, url: str) -> Optional[dict[str, Any]]:
         return None
     price_pln = price_pln_from_text(raw["price"])
     location = (raw["location"] or "").strip() or "Polska"
-    city = (location.split(",")[0].strip() if location else "Polska")
+    city = _extract_city(location)
+    region = _extract_region_from_location(location)
     auction_date = _parse_auction_date(raw["date"])
 
     return normalized_listing(
@@ -91,7 +109,12 @@ def _parse_detail(html: str, url: str) -> Optional[dict[str, Any]]:
         auction_date=auction_date,
         images=raw["images"],
         raw_data=raw,
+        region=region,
     )
+
+
+# Default: all regions (no filter). Set e_licytacje_region in config to e.g. "świętokrzyskie" to limit.
+DEFAULT_E_LICYTACJE_REGION = ""
 
 
 def _cutoff_for_days_back(days: int) -> Optional[datetime]:
@@ -108,6 +131,12 @@ def scrape_elicytacje(config: Optional[dict] = None) -> list[dict[str, Any]]:
     max_listings = scraping.get("max_listings")  # e.g. on-demand run cap (20); None = no limit
     days_back = scraping.get("days_back")
     cutoff = _cutoff_for_days_back(int(days_back)) if days_back is not None else None
+    # Region filter: same behaviour as komornik — "" = all; e.g. "świętokrzyskie" = only that województwo
+    region_val = scraping.get("e_licytacje_region")
+    if region_val is None:
+        region = (DEFAULT_E_LICYTACJE_REGION or "").strip() or None
+    else:
+        region = (region_val or "").strip() or None
 
     results = []
     with httpx.Client(headers=DEFAULT_HEADERS, timeout=60.0, follow_redirects=True) as client:
@@ -119,13 +148,22 @@ def scrape_elicytacje(config: Optional[dict] = None) -> list[dict[str, Any]]:
                 resp = sync_get_with_retry(client, list_url, delay)
                 soup = BeautifulSoup(resp.text, "html.parser")
                 items = _parse_list_page(soup, BASE_URL)
+                logger.info("E-licytacje list page {}: {} links", page, len(items))
                 if not items:
+                    if page == 1:
+                        logger.warning(
+                            "E-licytacje: no links on first page (check region or site structure)"
+                        )
                     break
                 for item in items:
                     try:
                         r = sync_get_with_retry(client, item["url"], delay)
                         row = _parse_detail(r.text, item["url"])
                         if row:
+                            if region is not None:
+                                row_region = (row.get("region") or "").strip().lower()
+                                if row_region and region.lower() not in row_region:
+                                    continue
                             ad_str = row.get("auction_date")
                             if cutoff is not None and ad_str:
                                 try:
