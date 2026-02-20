@@ -114,3 +114,18 @@ The date might only render when e.g. `source === 'komornik'` or `listing.auction
 | Condition too strict | Relax or fix the condition that decides when to show the date. |
 
 Checking the API response (Network tab) and the exact property used in the component usually pinpoints the issue even when there are no errors.
+
+---
+
+## Resolution (frontend): always show at least one date
+
+**Cause:** The card only rendered a date when `listing.auction_date` was set. For many listings (e.g. Komornik) `auction_date` is null in the DB, so nothing was shown. `created_at` existed but wasn’t displayed as text.
+
+**Fix applied in the frontend:**
+
+- If **`auction_date`** is set → show **"Licytacja: …"** with countdown and formatted date.
+- If **`auction_date`** is null/empty → show **"Dodano: …"** using **`created_at`** so the user always sees at least one date.
+
+Use a defensive **`formatDate()`** (e.g. `toLocaleString("pl-PL")` with a fallback to **"—"** for invalid/missing values) so "Invalid Date" never appears.
+
+To have **"Licytacja"** show for more listings (e.g. Komornik), the **backend** must populate **`auction_date`** when upserting (scraper must find and parse the auction date on the detail page). The frontend will display it as soon as it’s present.
