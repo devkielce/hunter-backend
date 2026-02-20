@@ -141,6 +141,7 @@ def scrape_komornik(config: Optional[dict] = None) -> list[dict[str, Any]]:
     scraping = cfg.get("scraping", {})
     delay = float(scraping.get("httpx_delay_seconds", 1.5))
     max_pages = int(scraping.get("max_pages_auctions", 50))
+    max_listings = scraping.get("max_listings")  # e.g. on-demand run cap (20); None = no limit
     # Only use default when key is missing; explicit "" means "all regions"
     region_val = scraping.get("komornik_region")
     if region_val is None:
@@ -186,6 +187,9 @@ def scrape_komornik(config: Optional[dict] = None) -> list[dict[str, Any]]:
                                 except (ValueError, TypeError):
                                     pass
                             results.append(row)
+                            if max_listings is not None and len(results) >= int(max_listings):
+                                stop_early = True
+                                break
                     except Exception as e:
                         logger.warning("Skip listing {}: {}", item["url"], e)
                 page += 1

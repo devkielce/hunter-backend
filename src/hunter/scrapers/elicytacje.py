@@ -105,6 +105,7 @@ def scrape_elicytacje(config: Optional[dict] = None) -> list[dict[str, Any]]:
     scraping = cfg.get("scraping", {})
     delay = float(scraping.get("httpx_delay_seconds", 1.5))
     max_pages = int(scraping.get("max_pages_auctions", 50))
+    max_listings = scraping.get("max_listings")  # e.g. on-demand run cap (20); None = no limit
     days_back = scraping.get("days_back")
     cutoff = _cutoff_for_days_back(int(days_back)) if days_back is not None else None
 
@@ -137,6 +138,9 @@ def scrape_elicytacje(config: Optional[dict] = None) -> list[dict[str, Any]]:
                                 except (ValueError, TypeError):
                                     pass
                             results.append(row)
+                            if max_listings is not None and len(results) >= int(max_listings):
+                                stop_early = True
+                                break
                     except Exception as e:
                         logger.warning("Skip listing {}: {}", item["url"], e)
                 page += 1

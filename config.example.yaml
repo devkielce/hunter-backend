@@ -9,9 +9,11 @@ scraping:
   playwright_delay_seconds: 4
   max_pages_classifieds: 10
   max_pages_auctions: 50   # Full scrape (scheduler / CLI). Use 1 for quick test.
-  # When run is triggered via POST /api/run (e.g. "Odśwież oferty"), use this to avoid container kill (e.g. 5–10).
-  # Omit or comment out to use max_pages_auctions for API runs too (may not finish on Railway).
+  # When run is triggered via POST /api/run (Odśwież oferty): cap pages and total listings. Daily/cron scrape is unaffected.
+  # Omit to use max_pages_auctions for API runs too (may not finish on Railway).
   on_demand_max_pages_auctions: 10
+  # Total listings to scrape on demand (default 20). First scraper gets up to this many; second gets remainder, etc.
+  on_demand_max_listings: 20
   # Optional: only keep listings with auction_date in the last N days; stops pagination when older. Omit for full scrape.
   # days_back: 1
   # Active sources: komornik, e_licytacje (Facebook via webhook). Omit or [] to run both.

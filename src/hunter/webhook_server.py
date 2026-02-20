@@ -96,17 +96,26 @@ def _check_run_secret() -> tuple[bool, Any]:
     return True, None
 
 
+# When triggered via POST /api/run (Odśwież oferty), cap total listings so the run is quick. Daily/cron scrape is unchanged.
+ON_DEMAND_MAX_LISTINGS = 20
+
+
 def _run_scrapers_background() -> None:
     """Run all scrapers and update _run_state when done. Runs in a daemon thread."""
     from hunter.run import run_scraper
     from hunter.scrapers import scrape_komornik, scrape_elicytacje
     try:
         cfg = get_config()
-        # When triggered via API, use shorter page limit so run finishes before container may stop (Railway etc.)
+        # When triggered via API (Odśwież oferty), limit pages and total listings; daily/cron scrape is unaffected.
         scraping = cfg.get("scraping", {})
         on_demand_pages = scraping.get("on_demand_max_pages_auctions")
+        on_demand_listings = scraping.get("on_demand_max_listings")
+        max_listings = int(on_demand_listings) if on_demand_listings is not None else ON_DEMAND_MAX_LISTINGS
+        scraping_overrides = {}
         if on_demand_pages is not None:
-            cfg = {**cfg, "scraping": {**scraping, "max_pages_auctions": int(on_demand_pages)}}
+            scraping_overrides["max_pages_auctions"] = int(on_demand_pages)
+        scraping_overrides["max_listings"] = max_listings
+        cfg = {**cfg, "scraping": {**scraping, **scraping_overrides}}
         all_scrapers = [
             ("komornik", scrape_komornik),
             ("e_licytacje", scrape_elicytacje),
@@ -114,8 +123,19 @@ def _run_scrapers_background() -> None:
         sources = cfg.get("scraping", {}).get("sources")
         scrapers = [(n, fn) for n, fn in all_scrapers if n in sources] if sources else all_scrapers
         results = []
+        remaining = max_listings
         for name, fn in scrapers:
-            found, upserted, status, err = run_scraper(name, fn, cfg, dry_run=False)
+            if remaining <= 0:
+                results.append({
+                    "source": name,
+                    "listings_found": 0,
+                    "listings_upserted": 0,
+                    "status": "skipped",
+                    "error_message": "On-demand cap reached",
+                })
+                continue
+            cfg_for_scraper = {**cfg, "scraping": {**cfg["scraping"], "max_listings": remaining}}
+            found, upserted, status, err = run_scraper(name, fn, cfg_for_scraper, dry_run=False)
             results.append({
                 "source": name,
                 "listings_found": found,
@@ -123,6 +143,7 @@ def _run_scrapers_background() -> None:
                 "status": status,
                 "error_message": err,
             })
+            remaining = max(0, remaining - found)
         with _run_lock:
             _run_state["status"] = "completed"
             _run_state["finished_at"] = __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat()
