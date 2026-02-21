@@ -143,8 +143,9 @@ The frontend is a **separate repo**. This section summarizes its view for alignm
 | `GET /` | Home; link to dashboard |
 | `GET /dashboard` | Main dashboard: listings, filters, statuses, “Odśwież oferty” |
 | `PATCH /api/listings/[id]` | Update listing status (frontend; backend does not touch status) |
-| `POST /api/run` | **Proxy** to backend `POST /api/run` (on-demand scrape) |
-| `GET /api/run/status` | **Proxy** to backend (poll until completed/error) |
+| **Odśwież oferty** | **Refetch listings from Supabase only** (do not call POST /api/run). See docs/FRONTEND_API_RUN_PROXY.md. |
+| `POST /api/run` | **Proxy** to backend (optional: use only for a separate "Uruchom scrapery" action) |
+| `GET /api/run/status` | **Proxy** to backend (poll when scrapers were triggered) |
 | `POST /api/apify/webhook` | Apify webhook **fallback** (primary: backend `POST /webhook/apify`) |
 | `GET /api/cron/notify` | Daily digest cron (e.g. 8:00 UTC); Resend; sets `notified = true` |
 
@@ -235,7 +236,7 @@ See **docs/APIFY_WEBHOOK_FLOW.md** and **docs/APIFY_INTEGRATION_CHECKLIST.md**.
 | **Schema source of truth** | `supabase_schema.sql` (this repo) |
 | **Backend env (production)** | SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, APIFY_WEBHOOK_SECRET, APIFY_TOKEN (optional), PORT |
 | **Frontend proxy env** | BACKEND_URL, HUNTER_RUN_SECRET (= APIFY_WEBHOOK_SECRET on backend) |
-| **Digest cron** | Frontend: GET /api/cron/notify (e.g. 8:00 UTC). Backend: scheduler 8:00 Europe/Warsaw (optional). |
+| **Digest cron** | Frontend: GET /api/cron/notify (e.g. 8:00 UTC). Backend: scheduler 10:00 CET Europe/Warsaw (optional). |
 
 ---
 

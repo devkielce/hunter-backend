@@ -1,6 +1,23 @@
-# Frontend: proxy for POST /api/run (Odśwież oferty)
+# Frontend: proxy for POST /api/run and Odśwież oferty (refetch)
 
 The backend exposes **POST /api/run** and **GET /api/run/status** on Railway. The frontend must **not** call Railway directly from the browser (to avoid exposing the run secret). Instead, the frontend calls its own **Vercel API routes**, which proxy to Railway with the secret.
+
+---
+
+## Recommended: Odśwież oferty = refetch only (no scrapers)
+
+**Make the "Odśwież oferty" button only refresh the list from the DB.** Do **not** call POST /api/run from this button.
+
+- **Behaviour:** On click, re-fetch listings from Supabase (or your API that reads Supabase) and update the list on the page. No backend run, no polling.
+- **Why:** Scrapers run on a schedule (e.g. 10:00 CET). The button should show the latest data already in the DB; it does not need to trigger scrapers. This avoids long waits and ensures the UI updates immediately.
+
+**Implementation:** In the component that renders "Odśwież oferty", call your existing data-fetch (e.g. `refetch()` from React Query, or re-run the Supabase query and set state). Do not call your proxy to POST /api/run.
+
+**Optional:** If you want a separate action to trigger scrapers (e.g. "Uruchom scrapery"), keep a second button or menu item that calls POST /api/run and then polls GET /api/run/status until completed, then refetches listings.
+
+---
+
+## Optional: Trigger scrapers (POST /api/run)
 
 Scrapers run **in the background** on the backend. POST /api/run returns **202 Accepted** immediately; the frontend should then **poll GET /api/run/status** until the run is completed or failed, then refresh the listings.
 
@@ -37,9 +54,9 @@ Scrapers run **in the background** on the backend. POST /api/run returns **202 A
 
 ---
 
-## Frontend flow (Odśwież oferty)
+## Frontend flow (when triggering scrapers, e.g. "Uruchom scrapery")
 
-1. User clicks **Odśwież oferty** → frontend calls **POST /api/run** (your Vercel proxy → Railway).
+1. User clicks the button → frontend calls **POST /api/run** (your Vercel proxy → Railway).
 2. If response is **202**: show e.g. "Odświeżanie w toku..." and start **polling GET /api/run/status** every 2–3 seconds (same proxy → Railway, same **X-Run-Secret**).
 3. When **GET /api/run/status** returns `status === "completed"`: refresh the listings list (re-fetch your listings from Supabase or your API) and show success. When `status === "error"`: show `error` to the user.
 4. If POST /api/run returns **409**: a run is already in progress; you can show "Odświeżanie już trwa" and optionally poll status until completed.
