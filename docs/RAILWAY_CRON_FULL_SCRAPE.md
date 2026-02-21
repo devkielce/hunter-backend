@@ -25,10 +25,10 @@ In your Railway project:
 3. **Cron schedule**  
    In the same service → **Settings**:
    - Find **Cron Schedule** (or **Cron**).
-   - Set a crontab expression, e.g.:
-     - **Every day at 8:00 Warsaw (winter):** `0 7 * * *` (7:00 UTC).
-     - **Every day at 8:00 Warsaw (summer):** `0 6 * * *` (6:00 UTC).  
-     Railway uses **UTC**; Warsaw is UTC+1 (winter) or UTC+2 (summer). Adjust the hour if you want a different local time.
+   - Set a crontab expression. **Railway cron uses UTC.** For **13:30 CET (Europe/Warsaw)**:
+     - **Winter (CET, UTC+1):** `30 12 * * *` (12:30 UTC = 13:30 CET).
+     - **Summer (CEST, UTC+2):** `30 11 * * *` (11:30 UTC = 13:30 CEST).  
+     Use `30 12 * * *` for daily 13:30 Warsaw time in winter; switch to `30 11 * * *` in summer if you want the same local clock time.
 
 4. **Same env vars as the web service**  
    In the **Cron service** → **Variables**, add the same variables the backend needs to scrape and write to the DB:
@@ -44,7 +44,7 @@ In your Railway project:
 ## 2. Behaviour
 
 - **Web service (existing):** Keeps serving POST /api/run and GET /api/run/status. “Odśwież oferty” still starts a run in a **background thread** with `on_demand_max_pages_auctions` (e.g. 10 pages). That run may be killed if the container stops.
-- **Cron service (new):** On the schedule (e.g. daily at 7:00 UTC), Railway starts this service, runs **`hunter run-all`** (full scrape, all pages from config), writes to Supabase, then the process **exits**. Railway does not stop it early; it runs as long as the scrape needs (e.g. 15–30 minutes).
+- **Cron service (new):** On the schedule (e.g. daily at 13:30 CET → `30 12 * * *` UTC in winter), Railway starts this service, runs **`hunter run-all`** (full scrape, all pages from config), writes to Supabase, then the process **exits**. Railway does not stop it early; it runs as long as the scrape needs (e.g. 15–30 minutes).
 
 So the DB gets a **full** scrape from the Cron job on a schedule, and optionally a **quick** refresh from the button when the web run completes.
 
@@ -71,5 +71,5 @@ Railway does not offer “trigger this cron now” from the UI. If you want a **
 
 | Goal                         | How |
 |-----------------------------|-----|
-| Full scrape, runs as long as needed | New Railway service, start command `hunter run-all`, Cron Schedule e.g. `0 7 * * *`, same SUPABASE_* (and optional APIFY_*) vars. |
+| Full scrape, runs as long as needed | New Railway service, start command `hunter run-all`, Cron Schedule e.g. `30 12 * * *` (13:30 CET), same SUPABASE_* (and optional APIFY_*) vars. |
 | Quick refresh from the app  | Keep POST /api/run on the web service; use `on_demand_max_pages_auctions` (e.g. 10) so that run is shorter. |
