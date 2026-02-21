@@ -59,6 +59,31 @@ CREATE TRIGGER listings_preserve_removed_from_source_at
   BEFORE UPDATE ON public.listings
   FOR EACH ROW EXECUTE FUNCTION public.preserve_removed_from_source_at();
 
+-- RPC: archive listings for source not seen since cutoff (returns count updated)
+CREATE OR REPLACE FUNCTION public.archive_listings_not_seen_since(
+  p_source TEXT,
+  p_cutoff TIMESTAMPTZ
+)
+RETURNS INT
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  updated_count INT;
+BEGIN
+  WITH updated AS (
+    UPDATE public.listings
+    SET removed_from_source_at = now(), notified = true
+    WHERE source = p_source
+      AND removed_from_source_at IS NULL
+      AND (last_seen_at IS NULL OR last_seen_at < p_cutoff)
+    RETURNING id
+  )
+  SELECT count(*)::INT INTO updated_count FROM updated;
+  RETURN updated_count;
+END;
+$$;
+
 -- Email digest: frontend cron sends to these addresses (no filters in MVP)
 CREATE TABLE IF NOT EXISTS public.alert_rules (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

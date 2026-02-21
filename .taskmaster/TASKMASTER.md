@@ -70,6 +70,8 @@ Single source of truth for the **Hunter** system: app description, architecture,
 | raw_data      | JSONB       | ✓       | (opt)    | Full scraped payload. |
 | status        | TEXT        | —       | ✓        | Default `'new'`; frontend PATCH. |
 | notified      | BOOLEAN     | —       | ✓        | Default false; frontend sets after digest. |
+| last_seen_at  | TIMESTAMPTZ | ✓       | ✓        | Set on each scraper upsert; used for source-archive. |
+| removed_from_source_at | TIMESTAMPTZ | —  | ✓        | Set when not seen in last 5 runs; never cleared. Frontend filter by IS NULL. |
 | created_at    | TIMESTAMPTZ | auto    | ✓        | "NEW today" badge. |
 | updated_at    | TIMESTAMPTZ | trigger | ✓        | |
 | region        | TEXT        | ✓ (Komornik) | ✓   | Województwo; optional. Add column if missing; backend retries without it. |
@@ -112,7 +114,8 @@ Single source of truth for the **Hunter** system: app description, architecture,
 
 ### Behaviour
 
-- Upsert always on `source_url`. Full `raw_data` stored.
+- Upsert always on `source_url`. Full `raw_data` stored. Each upsert sets `last_seen_at` to the run’s finished time.
+- **Source-archive:** After each successful run, listings for that source not seen in the last 5 successful runs get `removed_from_source_at` set and `notified = true`; status is preserved. No dis-archive. See [docs/SOURCE_ARCHIVE.md](docs/SOURCE_ARCHIVE.md).
 - Price: Polish formats → grosze; "Zapytaj o cenę" / "Cena do negocjacji" → null.
 - Auction date: Europe/Warsaw → UTC ISO.
 - One bad listing skipped; scraper fails only on fatal errors.
@@ -211,6 +214,7 @@ See **docs/APIFY_WEBHOOK_FLOW.md** and **docs/APIFY_INTEGRATION_CHECKLIST.md**.
 | **docs/APIFY_WEBHOOK_FLOW.md** | Who triggers what: Apify → backend webhook → backend fetches dataset. |
 | **docs/APIFY_INTEGRATION_CHECKLIST.md** | Apify URL, headers, payload (datasetId), test flow. |
 | **docs/FRONTEND_API_RUN_PROXY.md** | Vercel proxy for POST /api/run and GET /api/run/status; env vars; 401 troubleshooting. |
+| **docs/SOURCE_ARCHIVE.md** | Listings not seen in last 5 runs get `removed_from_source_at`; frontend filter by IS NULL. |
 | **docs/RAILWAY_CRON_FULL_SCRAPE.md** | Second Railway service with Cron Schedule for full `hunter run-all`. |
 | **docs/DATE_NOT_RENDERING.md** | Why dates don’t show (select, keys, null, normalization, "undefined"). |
 | **docs/FRONTEND_RENDER_SNIPPET.md** | Type, Supabase select, normalizeListing, ListingCard snippet (pl-PL, grosze). |

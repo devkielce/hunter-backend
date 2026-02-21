@@ -10,7 +10,12 @@ from hunter.config import get_config
 from hunter.logging_config import setup_logging
 from hunter.schema import for_supabase
 from hunter.scrapers.common import is_likely_error_page
-from hunter.supabase_client import get_client, log_scrape_run, upsert_listings
+from hunter.supabase_client import (
+    archive_listings_not_seen_in_last_n_runs,
+    get_client,
+    log_scrape_run,
+    upsert_listings,
+)
 
 # Active scrapers only (e_licytacje, komornik, amw; Facebook via webhook)
 SCRAPER_NAMES = ["komornik", "e_licytacje", "amw"]
@@ -49,6 +54,7 @@ def run_scraper(
             finished_at = datetime.now(timezone.utc).isoformat()
             client = get_client()
             log_scrape_run(client, name, started_at, finished_at, 0, 0, "success", None)
+            archive_listings_not_seen_in_last_n_runs(client, name, n=5)
             return 0, 0, "success", None
 
         # Defense-in-depth: skip any row that looks like an error page before upsert
@@ -62,13 +68,16 @@ def run_scraper(
                 len(rows) - len(rows_clean),
             )
         prepared = [for_supabase(r) for r in rows_clean]
+        finished_at = datetime.now(timezone.utc).isoformat()
+        for row in prepared:
+            row["last_seen_at"] = finished_at
         client = get_client()
         listings_upserted = upsert_listings(client, prepared)
-        finished_at = datetime.now(timezone.utc).isoformat()
         log_scrape_run(
             client, name, started_at, finished_at,
             listings_found, listings_upserted, "success", None,
         )
+        archive_listings_not_seen_in_last_n_runs(client, name, n=5)
         return listings_found, listings_upserted, "success", None
     except Exception as e:
         status = "error"
