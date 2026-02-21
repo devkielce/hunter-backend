@@ -20,6 +20,7 @@ In your Railway project:
      ```bash
      hunter run-all
      ```
+   - **Do not use `hunter schedule`.** That process runs forever (waits for the next cron time), so Railway shows the run as "Running" for hours. Use **`hunter run-all`** so the process runs the scrapers once and exits; the cron triggers a fresh run each day.
    - Do **not** run the web server (no `gunicorn`, no `hunter webhook`) in this service. This service should only run the scrapers and exit.
 
 3. **Cron schedule**  
