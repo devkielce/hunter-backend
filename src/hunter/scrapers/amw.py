@@ -48,20 +48,60 @@ def _list_page_url(page: int, limit: int = 50) -> str:
     return f"{BASE_URL}{LIST_PATH},page,{page},limit,{limit},sort,estate_asc"
 
 
-def _parse_list_page(soup: BeautifulSoup) -> list[dict[str, Any]]:
+# Detail page path: /pl/nieruchomosci/nieruchomosci-amw/{slug} (slug = e.g. oswiecim-ul-zwirki-i-wigury-25-3344)
+_DETAIL_PATH_RE = re.compile(
+    r"^/pl/nieruchomosci/nieruchomosci-amw/([a-z0-9][a-z0-9-]*)$",
+    re.I,
+)
+
+
+def _find_detail_url_in_card(h2) -> Optional[str]:
+    """Find first <a href="..."> in the card (h2 + wrapping/parent/siblings) that points to an offer detail page."""
+    def norm(href: str) -> Optional[str]:
+        path = (href or "").split("?")[0].strip()
+        if "wyniki-wyszukiwania" in path:
+            return None
+        if _DETAIL_PATH_RE.match(path):
+            return path
+        return None
+
+    candidates = []
+    # h2 might be wrapped in <a> (e.g. <a href=".../slug"><h2>...</h2></a>)
+    parent = h2.parent
+    if parent and parent.name == "a":
+        p = norm(parent.get("href") or "")
+        if p:
+            candidates.append(p)
+    for a in h2.select("a[href]"):
+        p = norm(a.get("href") or "")
+        if p:
+            candidates.append(p)
+    for sib in h2.find_next_siblings():
+        if sib.name == "h2":
+            break
+        if hasattr(sib, "select"):
+            for a in sib.select("a[href]"):
+                p = norm(a.get("href") or "")
+                if p:
+                    candidates.append(p)
+    if not candidates:
+        return None
+    return candidates[0]
+
+
+def _parse_list_page(soup: BeautifulSoup, base: str) -> list[dict[str, Any]]:
     """
     Parse list page: each offer is under an h2 (location/title), then block with
     Powierzchnia, Cena wywoławcza, Woj., W dniu.
-    No detail URLs on list; we build stable source_url from content hash.
+    Extract real detail URL from card when present; else fall back to hash-based URL.
     """
     results = []
-    # All h2 that look like offer titles (location lines)
+    seen_source_urls: set[str] = set()
     h2s = soup.select("h2")
     for h2 in h2s:
         title = (h2.get_text(strip=True) or "").strip()
         if not title or len(title) < 3:
             continue
-        # Skip if it's a section header, not a location
         if title.startswith("Kategoria") or "Województwo" in title or "Lista" in title:
             continue
         block = []
@@ -91,10 +131,18 @@ def _parse_list_page(soup: BeautifulSoup) -> list[dict[str, Any]]:
         auction_date = _parse_auction_date(date_str)
         city = title.split(",")[0].strip() if "," in title else title.strip()
         location = title
-        # Stable unique id for upsert (no detail URL on AMW list)
-        raw_id = f"{title}|{price_pln or 0}|{auction_date.isoformat() if auction_date else ''}"
-        hash_id = hashlib.sha256(raw_id.encode("utf-8")).hexdigest()[:16]
-        source_url = f"{BASE_URL}/pl/nieruchomosci/nieruchomosci-amw/#{hash_id}"
+
+        detail_path = _find_detail_url_in_card(h2)
+        if detail_path:
+            source_url = urljoin(base, detail_path)
+        else:
+            raw_id = f"{title}|{price_pln or 0}|{auction_date.isoformat() if auction_date else ''}"
+            hash_id = hashlib.sha256(raw_id.encode("utf-8")).hexdigest()[:16]
+            source_url = f"{base}/pl/nieruchomosci/nieruchomosci-amw/#{hash_id}"
+
+        if source_url in seen_source_urls:
+            continue
+        seen_source_urls.add(source_url)
         if is_likely_error_page(title, None):
             continue
         results.append({
@@ -127,7 +175,7 @@ def scrape_amw(config: Optional[dict] = None) -> list[dict[str, Any]]:
             try:
                 resp = sync_get_with_retry(client, list_url, delay)
                 soup = BeautifulSoup(resp.text, "html.parser")
-                items = _parse_list_page(soup)
+                items = _parse_list_page(soup, BASE_URL)
                 logger.info("AMW list page {}: {} offers", page + 1, len(items))
                 if not items:
                     break
