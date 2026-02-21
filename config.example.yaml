@@ -39,6 +39,6 @@ logging:
 
 scheduler:
   enabled: true
-  # Updates once per day at 13:00 CET (Europe/Warsaw)
-  cron: "0 13 * * *"
+  # Updates once per day at 13:07 CET (Europe/Warsaw)
+  cron: "7 13 * * *"
   timezone: "Europe/Warsaw"
