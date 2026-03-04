@@ -15,6 +15,7 @@ from hunter.http_utils import DEFAULT_HEADERS, sync_get_with_retry
 from hunter.price_parser import price_pln_from_full_text, price_pln_from_text
 from hunter.schema import normalized_listing
 from hunter.scrapers.common import is_likely_error_page
+from hunter.title_extractor import extract_short_title
 
 BASE_URL = "https://amw.com.pl"
 # Search results: all offers (no filters). Pagination: ,page,N,limit,LIMIT,sort,estate_asc
@@ -185,8 +186,12 @@ def scrape_amw(config: Optional[dict] = None) -> list[dict[str, Any]]:
                     if item["source_url"] in seen_urls:
                         continue
                     seen_urls.add(item["source_url"])
+                    short_title = extract_short_title(
+                        item.get("description") or item["title"],
+                        fallback=item["title"],
+                    )
                     row = normalized_listing(
-                        title=item["title"],
+                        title=short_title,
                         description=item.get("description"),
                         price_pln=item.get("price_pln"),
                         location=item["location"],

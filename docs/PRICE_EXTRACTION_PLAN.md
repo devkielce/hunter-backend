@@ -1,6 +1,6 @@
 # Plan implementacji: zbieranie cen (i metrażu)
 
-**Zaimplementowano (Faza 1–2):** rozszerzony parser ceny, fallback z pełnego tekstu (Komornik, e-licytacje, AMW), follow-link dla Facebooka, config `follow_link_for_price` / `follow_link_domains`. **Facebook:** filtr „tylko nieruchomości” (grupy mieszane → tylko oferty nieruchomości; szczegóły: `docs/FACEBOOK_REAL_ESTATE_FILTER.md`). Metraż (Faza 4) pozostaje opcjonalny.
+**Zaimplementowano (Faza 1–2):** rozszerzony parser ceny, fallback z pełnego tekstu (Komornik, e-licytacje, AMW), follow-link dla Facebooka, config `follow_link_for_price` / `follow_link_domains`. **Facebook:** filtr „tylko nieruchomości” (grupy mieszane → tylko oferty nieruchomości; szczegóły: `docs/FACEBOOK_REAL_ESTATE_FILTER.md`). **Tytuł (jedno zdanie):** moduł `title_extractor.py` – ekstrakcja bez AI (typ + pokoje + m² + kondygnacje) → np. „Mieszkanie 2-pokojowe, 45 m²”; używane w Facebook, AMW, Komornik, e-licytacje. Metraż (Faza 4) pozostaje opcjonalny.
 
 Cel: zamiast „CENA DO USTALENIA” na każdym ogłoszeniu — wyciągać realne ceny ze stron (i ewentualnie z linków). Dokument zawiera plan backendu oraz **co frontend ma wiedzieć**.
 
@@ -102,5 +102,6 @@ Cel: zamiast „CENA DO USTALENIA” na każdym ogłoszeniu — wyciągać realn
 | **Więcej ofert z ceną** | Po wdrożeniu planu backend będzie częściej wypełniał `price_pln`; frontend bez zmian. |
 | **surface_m2** (opcjonalnie) | Gdy pojawi się w schema/select — dodać do typu i UI (np. „X m²” w karcie). |
 | **raw_data** | Backend może zapisywać np. `price_from_followed_link`, `followed_price_url` — tylko do logów/debugu; frontend nie musi tego wyświetlać. |
+| **title** | Backend ustawia krótki tytuł w jednym zdaniu (np. „Mieszkanie 2-pokojowe, 45 m²”) przez `title_extractor`; frontend dalej czyta `listing.title` — bez zmian. |
 
 Frontend **nie musi** wprowadzać żadnych zmian, żeby skorzystać z lepszego zbierania cen; ewentualne zmiany to: obsługa `surface_m2` (gdy będzie) i upewnienie się, że „Cena do ustalenia” jest pokazywana tylko gdy `price_pln === null`.

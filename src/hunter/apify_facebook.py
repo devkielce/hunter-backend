@@ -21,6 +21,7 @@ from hunter.price_fallback import extract_first_offer_url, fetch_price_from_url
 from hunter.price_parser import price_pln_from_full_text
 from hunter.schema import for_supabase, normalized_listing
 from hunter.supabase_client import get_client, log_scrape_run, upsert_listings
+from hunter.title_extractor import extract_short_title
 
 # Słowa charakterystyczne dla nieruchomości – post musi zawierać co najmniej jedno (Facebook: tylko takie trafiają do listings)
 REAL_ESTATE_KEYWORDS = [
@@ -151,7 +152,8 @@ def normalize_facebook_item(
     text = _text_from_item(item)
     if not passes_real_estate_filter(text):
         return None
-    title = (text[:500] + "…") if len(text) > 500 else (text or "Post Facebook")
+    fallback_title = (text[:500] + "…") if len(text) > 500 else (text or "Post Facebook")
+    title = extract_short_title(text, fallback=fallback_title)
     images = _images_from_item(item)
 
     price_pln = price_pln_from_full_text(text)
