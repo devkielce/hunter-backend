@@ -10,6 +10,8 @@ NO_PRICE_PHRASES = (
     "zapytaj o cene",
     "cena do negocjacji",
     "cena do uzgodnienia",
+    "cena do ustalenia",
+    "do ustalenia",
     "na zapytanie",
     "do uzgodnienia",
     "kontakt",
@@ -56,3 +58,47 @@ def price_pln_from_text(text: Optional[str]) -> Optional[int]:
         # Optional: apply rate; for now treat as PLN equivalent placeholder or skip
         pass
     return int(round(pln * 100))  # grosze
+
+
+# Patterns to find price in long text (e.g. "cena wywołania wynosi 61 500,00 zł", "Miesięczny czynsz netto: 6 000 zł")
+# Use \s* only (no [\d\s]*) so we don't consume digits of the price.
+_PRICE_IN_TEXT_PATTERNS = [
+    re.compile(
+        r"cena\s+wywo[łl]ania\s+(?:jest\s+równa\s+|wynosi\s+)\s*(\d[\d\s.,]*)\s*z[łl]",
+        re.I,
+    ),
+    re.compile(
+        r"suma\s+oszacowania\s+wynosi\s+(\d[\d\s.,]*)\s*z[łl]",
+        re.I,
+    ),
+    re.compile(
+        r"(?:wynosi|równa)\s+(\d[\d\s.,]+)\s*z[łl]",
+        re.I,
+    ),
+    re.compile(
+        r"czynsz\s+(?:netto|brutto)?\s*[:\s]*(\d[\d\s.,]*)\s*z[łl]",
+        re.I,
+    ),
+    re.compile(
+        r"(\d[\d\s]{2,}(?:,\d{2})?)\s*z[łl]\b",
+        re.I,
+    ),  # e.g. "61 500,00 zł" or "6 000 zł"
+]
+
+
+def price_pln_from_full_text(text: Optional[str]) -> Optional[int]:
+    """
+    Search long text for price patterns (e.g. obwieszczenie komornicze, opis AMW).
+    Returns first valid price found as grosze, or None.
+    """
+    if not text or not text.strip():
+        return None
+    for pat in _PRICE_IN_TEXT_PATTERNS:
+        m = pat.search(text)
+        if not m:
+            continue
+        snippet = m.group(1) if m.lastindex and m.lastindex >= 1 else m.group(0)
+        parsed = price_pln_from_text(snippet)
+        if parsed is not None:
+            return parsed
+    return None

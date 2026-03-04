@@ -1,6 +1,8 @@
 # Hunter Backend
 
-Production-oriented scraping backend for **Polish real estate**: **komornik**, **e_licytacje**, **Facebook (Apify)**. Normalized schema, Supabase upserts, scheduling, loguru logging.
+Production-oriented scraping backend for **Polish real estate**: **komornik**, **e_licytacje**, **amw**, **Facebook (Apify)**. Normalized schema, Supabase upserts, scheduling, loguru logging.
+
+**Full documentation (run metrics, schema, APIs, deployment, troubleshooting):** [docs/DOCUMENTATION.md](docs/DOCUMENTATION.md)
 
 ## Sources (active)
 
@@ -8,7 +10,7 @@ Obecnie włączone są tylko trzy źródła. Konfiguracja: `scraping.sources`, `
 
 | Source | Tech | Notes |
 |--------|------|--------|
-| licytacje.komornik.pl | httpx + BeautifulSoup | Bailiff auctions (mieszkania, wszystkie regiony) — [docs/KOMMORNIK_SEARCH_CRITERIA.md](docs/KOMMORNIK_SEARCH_CRITERIA.md) |
+| licytacje.komornik.pl | httpx + BeautifulSoup | Bailiff auctions (mieszkania, wszystkie regiony). See [docs/DOCUMENTATION.md](docs/DOCUMENTATION.md) § Komornik. |
 | elicytacje.komornik.pl | httpx + BeautifulSoup | Court auctions (Krajowa Rada Komornicza). List page may be JS-rendered (0 links in initial HTML); browser-based fetcher could be added later. |
 | Facebook (Apify) | Webhook + Apify API | Dataset → filter (słowa sprzedażowe) → upsert `source=facebook` |
 
@@ -20,7 +22,7 @@ Zbieranie ofert z Facebooka przeniesione z frontendu do backendu. Apify po zako�
 
 - **Konfiguracja:** `apify.token` (lub `APIFY_TOKEN`), opcjonalnie `apify.webhook_secret` (lub `APIFY_WEBHOOK_SECRET`) do weryfikacji webhooka.
 - **Endpoint:** `POST /webhook/apify` — body (JSON): `datasetId` lub `resource.defaultDatasetId`; nagłówek `x-apify-webhook-secret` jeśli ustawiony.
-- **Kiedy i jak wywoływany:** Apify **uruchamia aktora** według harmonogramu lub ręcznie (w Apify Console). Po zakończeniu runu Apify wywołuje webhook na backend; backend pobiera dataset z Apify API i zapisuje do Supabase. Szczegóły: [docs/APIFY_WEBHOOK_FLOW.md](docs/APIFY_WEBHOOK_FLOW.md).
+- **Kiedy i jak wywoływany:** Apify **uruchamia aktora** według harmonogramu lub ręcznie (w Apify Console). Po zakończeniu runu Apify wywołuje webhook na backend; backend pobiera dataset z Apify API i zapisuje do Supabase. Szczegóły: [docs/DOCUMENTATION.md](docs/DOCUMENTATION.md) § Apify.
 - **Uruchomienie serwera:** `hunter webhook` (domyślnie port 5000; zmienne `PORT`, `HOST`).
 
 ## On-demand run (navbar refresh)
@@ -28,7 +30,7 @@ Zbieranie ofert z Facebooka przeniesione z frontendu do backendu. Apify po zako�
 The same webhook server exposes **`POST /api/run`** to trigger all scrapers on demand (e.g. “Odśwież oferty”). No body required. Returns **202 Accepted** and runs scrapers in the background; frontend should poll **`GET /api/run/status`** until `status` is `completed` or `error`, then refresh listings.
 
 - **Optional auth:** set `run_api.secret` in config (or use `apify.webhook_secret` as fallback) and send header **`X-Run-Secret: <secret>`**. If no secret is configured, the endpoint is open (suitable only behind a trusted proxy or same origin).
-- **CORS:** If the frontend calls the backend from another origin, enable CORS on the server or call `/api/run` from a Next.js API route (server-side) and have the navbar call that route instead. See [docs/FRONTEND_API_RUN_PROXY.md](docs/FRONTEND_API_RUN_PROXY.md) for the exact proxy implementation and env vars.
+- **CORS:** If the frontend calls the backend from another origin, enable CORS on the server or call `/api/run` from a Next.js API route (server-side) and have the navbar call that route instead. See [docs/DOCUMENTATION.md](docs/DOCUMENTATION.md) § Frontend proxy.
 
 Szczegóły: pobieranie `GET https://api.apify.com/v2/datasets/{datasetId}/items?token=...`, filtrowanie (sprzedaż, cena, zł, nieruchomość, mieszkanie, dom, licytacja itd.), upsert po `source_url`; `source=facebook`, `price_pln`/`city`/`location` = null.
 
@@ -183,7 +185,7 @@ See `config.example.yaml`.
 
 ## Frontend alignment
 
-The Next.js dashboard (filters, status, countdown, email digest) uses the same Supabase project. **Facebook (Apify)** is now collected by hunter-backend via `POST /webhook/apify`; the frontend can stop handling the Apify webhook or keep it as fallback. See **FRONTEND_ALIGNMENT.md** for the shared schema. **Taskmaster:** `supabase_schema.sql` is the single source of truth. Apply it once in the Supabase SQL editor; use `supabase_migration_add_frontend_fields.sql` only if you already had an older schema.
+The Next.js dashboard (filters, status, countdown, email digest) uses the same Supabase project. **Facebook (Apify)** is collected by hunter-backend via `POST /webhook/apify`. See [docs/DOCUMENTATION.md](docs/DOCUMENTATION.md) for schema, frontend alignment, and proxy. **Schema:** `supabase_schema.sql` is the single source of truth; apply it once in the Supabase SQL editor.
 
 ## Deployment
 

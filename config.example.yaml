@@ -22,6 +22,10 @@ scraping:
   komornik_region: ""
   # E-licytacje: same as komornik — "" = all regions; set e.g. "świętokrzyskie" to limit. Region is parsed from detail (location parentheses).
   e_licytacje_region: ""
+  # When price is missing (e.g. Facebook post), follow first "offer" link in text and try to extract price from that page. Set false to disable.
+  follow_link_for_price: true
+  # If set, only follow links to these domains (e.g. ["arcabinvestments.com", "otodom.pl"]). Omit to allow any domain except social networks.
+  # follow_link_domains: ["arcabinvestments.com"]
 
 # Apify (Facebook): token do pobierania datasetów; webhook_secret do weryfikacji POST /webhook/apify
 apify:

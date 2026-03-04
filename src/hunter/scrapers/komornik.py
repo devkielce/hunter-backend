@@ -10,7 +10,7 @@ from bs4 import BeautifulSoup
 from loguru import logger
 
 from hunter.http_utils import DEFAULT_HEADERS, sync_get_with_retry
-from hunter.price_parser import price_pln_from_text
+from hunter.price_parser import price_pln_from_full_text, price_pln_from_text
 from hunter.schema import normalized_listing
 from hunter.scrapers.common import is_likely_error_page
 
@@ -99,6 +99,10 @@ def _parse_detail_page(html: str, url: str) -> Optional[dict[str, Any]]:
     if is_likely_error_page(raw["title"], raw["description"]):
         return None
     price_pln = price_pln_from_text(raw["price"])
+    if price_pln is None:
+        preview = soup.select_one("#Preview, .schema-preview, [id*='review']") or soup.body
+        full_text = preview.get_text(separator=" ", strip=True) if preview else (raw["description"] or "")
+        price_pln = price_pln_from_full_text(full_text)
     location = (raw["location"] or "").strip() or "Polska"
     city = _extract_city(location)
     auction_date = _parse_auction_date(raw["date"])

@@ -12,7 +12,7 @@ from bs4 import BeautifulSoup
 from loguru import logger
 
 from hunter.http_utils import DEFAULT_HEADERS, sync_get_with_retry
-from hunter.price_parser import price_pln_from_text
+from hunter.price_parser import price_pln_from_full_text, price_pln_from_text
 from hunter.schema import normalized_listing
 from hunter.scrapers.common import is_likely_error_page
 
@@ -120,6 +120,8 @@ def _parse_list_page(soup: BeautifulSoup, base: str) -> list[dict[str, Any]]:
             m = re.search(r"Cena\s+wywo[łl]awcza\s*([\d\s]+)\s*PLN", text, re.I)
             price_str = m.group(0) if m else None
         price_pln = price_pln_from_text(price_str)
+        if price_pln is None:
+            price_pln = price_pln_from_full_text(text)
         region = None
         rm = re.search(r"Woj\.?:\s*([^\s,]+(?:\s+[^\s,]+)?)", text)
         if rm:

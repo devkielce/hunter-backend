@@ -1,6 +1,7 @@
 """
 Apify → Facebook posts: fetch dataset by ID, filter by sales keywords, normalize to listings, upsert to Supabase.
 Webhook receives datasetId (or resource.id); we GET dataset items, filter, normalize, upsert.
+When price is missing in post text, optionally follow first "offer" link (e.g. arcabinvestments.com) to extract price.
 """
 from __future__ import annotations
 
@@ -12,6 +13,9 @@ import httpx
 from loguru import logger
 
 from hunter.config import get_config
+from hunter.http_utils import DEFAULT_HEADERS
+from hunter.price_fallback import extract_first_offer_url, fetch_price_from_url
+from hunter.price_parser import price_pln_from_full_text
 from hunter.schema import for_supabase, normalized_listing
 from hunter.supabase_client import get_client, log_scrape_run, upsert_listings
 
@@ -87,10 +91,14 @@ def _images_from_item(item: dict[str, Any]) -> list[str]:
     return urls
 
 
-def normalize_facebook_item(item: dict[str, Any]) -> Optional[dict[str, Any]]:
+def normalize_facebook_item(
+    item: dict[str, Any],
+    config: Optional[dict] = None,
+) -> Optional[dict[str, Any]]:
     """
     Jedna wpis z datasetu Apify (Facebook) → znormalizowany listing lub None.
     source_url jest wymagany; jeśli brak – pomijamy.
+    Gdy w tekście brak ceny, próbuje wyciągnąć cenę z pierwszego linku do oferty (np. arcabinvestments.com).
     """
     source_url = _source_url_from_item(item)
     if not source_url:
@@ -100,17 +108,39 @@ def normalize_facebook_item(item: dict[str, Any]) -> Optional[dict[str, Any]]:
         return None
     title = (text[:500] + "…") if len(text) > 500 else (text or "Post Facebook")
     images = _images_from_item(item)
+
+    price_pln = price_pln_from_full_text(text)
+    raw_extra = {}
+    if price_pln is None:
+        cfg = config or get_config()
+        scraping = (cfg.get("scraping") or {})
+        follow = scraping.get("follow_link_for_price", True)
+        if follow:
+            allowed = scraping.get("follow_link_domains")
+            if isinstance(allowed, list):
+                allowed = [str(d).strip().lower() for d in allowed if d]
+            offer_url = extract_first_offer_url(text, allowed_domains=allowed)
+            if offer_url:
+                delay = float(scraping.get("httpx_delay_seconds", 1.5))
+                with httpx.Client(headers=DEFAULT_HEADERS, timeout=10.0, follow_redirects=True) as client:
+                    price_pln = fetch_price_from_url(offer_url, client, delay=delay, timeout=10.0)
+                if price_pln is not None:
+                    raw_extra["price_from_followed_link"] = True
+                    raw_extra["followed_price_url"] = offer_url
+
+    raw_data = {k: v for k, v in item.items() if k not in ("images", "image")}
+    raw_data.update(raw_extra)
     return normalized_listing(
         title=title,
         description=text[:5000] if text else None,
-        price_pln=None,
+        price_pln=price_pln,
         location="",
         city="",
         source="facebook",
         source_url=source_url,
         auction_date=None,
         images=images,
-        raw_data={k: v for k, v in item.items() if k not in ("images", "image")},
+        raw_data=raw_data,
     )
 
 
@@ -143,7 +173,7 @@ def process_apify_dataset(
     rows = []
     for item in raw_items:
         try:
-            row = normalize_facebook_item(item)
+            row = normalize_facebook_item(item, config=cfg)
             if row:
                 rows.append(for_supabase(row))
         except Exception as e:
