@@ -1,6 +1,6 @@
 # Plan implementacji: zbieranie cen (i metrażu)
 
-**Zaimplementowano (Faza 1–2):** rozszerzony parser ceny, fallback z pełnego tekstu (Komornik, e-licytacje, AMW), follow-link dla Facebooka, config `follow_link_for_price` / `follow_link_domains`. Metraż (Faza 4) pozostaje opcjonalny.
+**Zaimplementowano (Faza 1–2):** rozszerzony parser ceny, fallback z pełnego tekstu (Komornik, e-licytacje, AMW), follow-link dla Facebooka, config `follow_link_for_price` / `follow_link_domains`. **Facebook:** filtr „tylko nieruchomości” (grupy mieszane → tylko oferty nieruchomości; szczegóły: `docs/FACEBOOK_REAL_ESTATE_FILTER.md`). Metraż (Faza 4) pozostaje opcjonalny.
 
 Cel: zamiast „CENA DO USTALENIA” na każdym ogłoszeniu — wyciągać realne ceny ze stron (i ewentualnie z linków). Dokument zawiera plan backendu oraz **co frontend ma wiedzieć**.
 

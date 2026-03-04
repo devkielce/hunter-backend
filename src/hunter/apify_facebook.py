@@ -1,7 +1,10 @@
 """
-Apify → Facebook posts: fetch dataset by ID, filter by sales keywords, normalize to listings, upsert to Supabase.
-Webhook receives datasetId (or resource.id); we GET dataset items, filter, normalize, upsert.
+Apify → Facebook posts: fetch dataset by ID, filter to real estate only, normalize to listings, upsert to Supabase.
+Webhook receives datasetId (or resource.id); we GET dataset items, filter (only nieruchomości), normalize, upsert.
 When price is missing in post text, optionally follow first "offer" link (e.g. arcabinvestments.com) to extract price.
+
+Filtr „tylko nieruchomości” stosowany jest wyłącznie do Facebooka (grupy mieszane: skutery, biżuteria itd.).
+E-licytacje i AMW nie używają tego filtra – tam treść to z założenia oferty nieruchomości.
 """
 from __future__ import annotations
 
@@ -19,24 +22,60 @@ from hunter.price_parser import price_pln_from_full_text
 from hunter.schema import for_supabase, normalized_listing
 from hunter.supabase_client import get_client, log_scrape_run, upsert_listings
 
-# Słowa sprzedażowe – tylko itemy zawierające co najmniej jedno trafiają do listings
-SALES_KEYWORDS = [
-    "sprzedaż",
-    "sprzedam",
-    "sprzedaję",
-    "cena",
-    "zł",
-    "zl",
+# Słowa charakterystyczne dla nieruchomości – post musi zawierać co najmniej jedno (Facebook: tylko takie trafiają do listings)
+REAL_ESTATE_KEYWORDS = [
     "nieruchomość",
     "nieruchomosc",
     "mieszkanie",
     "dom",
     "działka",
     "dzialka",
-    "licytacja",
+    "lokal",
     "wynajem",
     "do wynajęcia",
     "do wynajecia",
+    "wynajmę",
+    "wynajme",
+    "sprzedaż mieszkania",
+    "sprzedaz mieszkania",
+    "sprzedam mieszkanie",
+    "sprzedam dom",
+    "pokoje",
+    "kawalerka",
+    "metraż",
+    "metraz",
+    "m²",
+    "m2",
+    "powierzchnia",
+    "blok",
+    "osiedle",
+    "czynsz",
+    "na sprzedaż",
+    "ul. ",
+    "ul ",
+]
+
+# Słowa wykluczające – post z tymi słowami (jako główny temat) nie jest nieruchomością; pomijamy
+NON_REAL_ESTATE_KEYWORDS = [
+    "skuter",
+    "motor",
+    "motocykl",
+    "biżuteria",
+    "bizuteria",
+    "rower",
+    "samochód",
+    "samochod",
+    "auto ",
+    "meble",
+    "odzież",
+    "odziez",
+    "telefon",
+    "laptop",
+    "komputer",
+    "zwierzę",
+    "zwierze",
+    "pies ",
+    "kot ",
 ]
 
 APIFY_DATASET_ITEMS_URL = "https://api.apify.com/v2/datasets/{dataset_id}/items"
@@ -60,12 +99,18 @@ def _text_from_item(item: dict[str, Any]) -> str:
     return " ".join(parts) if parts else ""
 
 
-def passes_sales_filter(text: str) -> bool:
-    """True jeśli tekst zawiera przynajmniej jedno słowo sprzedażowe (case-insensitive)."""
-    if not text:
+def passes_real_estate_filter(text: str) -> bool:
+    """
+    True tylko jeśli post wygląda na ofertę nieruchomości (Facebook groups: odfiltrowanie skuterów, biżuterii itd.).
+    Wymaga: co najmniej jedno słowo z REAL_ESTATE_KEYWORDS.
+    Odrzuca: posty zawierające słowa z NON_REAL_ESTATE_KEYWORDS (główny temat to nie nieruchomość).
+    """
+    if not text or not text.strip():
         return False
     t = text.lower()
-    return any(kw.lower() in t for kw in SALES_KEYWORDS)
+    if any(kw.lower() in t for kw in NON_REAL_ESTATE_KEYWORDS):
+        return False
+    return any(kw.lower() in t for kw in REAL_ESTATE_KEYWORDS)
 
 
 def _source_url_from_item(item: dict[str, Any]) -> Optional[str]:
@@ -104,7 +149,7 @@ def normalize_facebook_item(
     if not source_url:
         return None
     text = _text_from_item(item)
-    if not passes_sales_filter(text):
+    if not passes_real_estate_filter(text):
         return None
     title = (text[:500] + "…") if len(text) > 500 else (text or "Post Facebook")
     images = _images_from_item(item)
