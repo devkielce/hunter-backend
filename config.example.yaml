@@ -29,6 +29,21 @@ scraping:
   # For komornik, e_licytacje, amw: archive listings with auction_date older than this many months (default 2). See docs/ARCHIVE_RULES_PLAN.md.
   # archive_older_than_months: 2
 
+# Investment score (0–100) per listing. See docs/SCORING_HUNTER.md.
+# scoring:
+#   weights:
+#     price_anomaly: 0.35   # spread do mediany ceny za m²
+#     yield: 0.25           # yield brutto (czynsz/cena)
+#     location: 0.25       # atrakcyjność regionu
+#     risk: 0.15           # ryzyko źródła (odejmowane)
+#   risk_by_source:
+#     komornik: 0.7
+#     e_licytacje: 0.5
+#     amw: 0.4
+#     facebook: 0.4
+#   location_score_by_region: {}   # np. mazowieckie: 0.9, małopolskie: 0.8; brak = 0.5
+#   default_median_price_m2: 8000   # PLN/m² gdy brak mediany z ofert
+
 # Apify (Facebook): token do pobierania datasetów; webhook_secret do weryfikacji POST /webhook/apify
 apify:
   token: "YOUR_APIFY_TOKEN"

@@ -7,6 +7,7 @@ from typing import Any, Callable, Optional
 from loguru import logger
 
 from hunter.config import get_config
+from hunter.investment_score import compute_investment_score, compute_medians_per_region
 from hunter.logging_config import setup_logging
 from hunter.schema import for_supabase
 from hunter.scrapers.common import is_likely_error_page
@@ -74,6 +75,11 @@ def run_scraper(
                 "Skipped {} listing(s) as likely error pages before upsert",
                 len(rows) - len(rows_clean),
             )
+        medians = compute_medians_per_region(rows_clean)
+        for r in rows_clean:
+            r.setdefault("raw_data", {})
+            score = compute_investment_score(r, medians, cfg)
+            r["raw_data"]["investment_score"] = score
         prepared = [for_supabase(r) for r in rows_clean]
         finished_at = datetime.now(timezone.utc).isoformat()
         for row in prepared:

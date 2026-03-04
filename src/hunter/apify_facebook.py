@@ -29,6 +29,7 @@ from hunter.supabase_client import (
     log_scrape_run,
     upsert_listings,
 )
+from hunter.investment_score import compute_investment_score, compute_medians_per_region
 from hunter.title_extractor import extract_short_title
 
 # Słowa charakterystyczne dla nieruchomości – post musi zawierać co najmniej jedno (Facebook: tylko takie trafiają do listings)
@@ -255,17 +256,23 @@ def process_apify_dataset(
     token = _get_apify_token(cfg)
     raw_items = fetch_dataset_items(dataset_id, token)
     logger.info("Apify Facebook: fetched {} raw items for dataset_id={}", len(raw_items), dataset_id)
-    rows = []
+    rows_raw = []
     for item in raw_items:
         try:
             row = normalize_facebook_item(item, config=cfg)
             if row:
-                rows.append(for_supabase(row))
+                rows_raw.append(row)
         except Exception as e:
             logger.warning("Skip Facebook item: {}", e)
-    if not rows:
+    if not rows_raw:
         logger.info("Apify Facebook: 0 listings after filter (dataset_id={})", dataset_id)
         return 0, 0
+    medians = compute_medians_per_region(rows_raw)
+    for r in rows_raw:
+        r.setdefault("raw_data", {})
+        score = compute_investment_score(r, medians, cfg)
+        r["raw_data"]["investment_score"] = score
+    rows = [for_supabase(r) for r in rows_raw]
     client = get_client()
     finished_at = datetime.now(timezone.utc).isoformat()
     started_at = finished_at
@@ -277,11 +284,11 @@ def process_apify_dataset(
         "facebook",
         started_at,
         finished_at,
-        len(rows),
+        len(rows_raw),
         upserted,
         "success",
         None,
     )
     months = (cfg.get("scraping") or {}).get("archive_older_than_months", 2)
     archive_listings_older_than(client, "facebook", interval=f"{months} months")
-    return len(rows), upserted
+    return len(rows_raw), upserted

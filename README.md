@@ -2,7 +2,7 @@
 
 Production-oriented scraping backend for **Polish real estate**: **komornik**, **e_licytacje**, **amw**, **Facebook (Apify)**. Normalized schema, Supabase upserts, scheduling, loguru logging.
 
-**Full documentation (run metrics, schema, APIs, deployment, troubleshooting):** [docs/DOCUMENTATION.md](docs/DOCUMENTATION.md)
+**Full documentation (run metrics, schema, APIs, deployment, troubleshooting):** [docs/DOCUMENTATION.md](docs/DOCUMENTATION.md). **Investment score (0–100) per listing:** [docs/SCORING_HUNTER.md](docs/SCORING_HUNTER.md).
 
 ## Sources (active)
 

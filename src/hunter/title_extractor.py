@@ -78,6 +78,13 @@ def _extract_surface(text: str) -> Optional[float]:
     return None
 
 
+def extract_surface_m2(text: Optional[str]) -> Optional[float]:
+    """Wyciąga metraż (m²) z tekstu. Eksportowane dla investment_score i innych modułów."""
+    if not text or not text.strip():
+        return None
+    return _extract_surface(" " + text.strip() + " ")
+
+
 def _extract_floor(text: str) -> Optional[str]:
     """Zwraca np. '3 kondygnacje', 'parter', '1 piętro'."""
     m = _FLOOR_RE.search(text)
