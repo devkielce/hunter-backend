@@ -12,6 +12,7 @@ from hunter.schema import for_supabase
 from hunter.scrapers.common import is_likely_error_page
 from hunter.supabase_client import (
     archive_listings_not_seen_in_last_n_runs,
+    archive_listings_older_than,
     get_client,
     log_scrape_run,
     upsert_listings,
@@ -19,6 +20,9 @@ from hunter.supabase_client import (
 
 # Active scrapers only (e_licytacje, komornik, amw; Facebook via webhook)
 SCRAPER_NAMES = ["komornik", "e_licytacje", "amw"]
+
+# Sources that have auction_date (or post date) → also archive by age (older than N months)
+SOURCES_WITH_AUCTION_DATE = ("komornik", "e_licytacje", "amw", "facebook")
 
 
 def run_scraper(
@@ -55,6 +59,9 @@ def run_scraper(
             client = get_client()
             log_scrape_run(client, name, started_at, finished_at, 0, 0, "success", None)
             archive_listings_not_seen_in_last_n_runs(client, name, n=5)
+            if name in SOURCES_WITH_AUCTION_DATE:
+                months = cfg.get("scraping", {}).get("archive_older_than_months", 2)
+                archive_listings_older_than(client, name, interval=f"{months} months")
             return 0, 0, "success", None
 
         # Defense-in-depth: skip any row that looks like an error page before upsert
@@ -78,6 +85,9 @@ def run_scraper(
             listings_found, listings_upserted, "success", None,
         )
         archive_listings_not_seen_in_last_n_runs(client, name, n=5)
+        if name in SOURCES_WITH_AUCTION_DATE:
+            months = cfg.get("scraping", {}).get("archive_older_than_months", 2)
+            archive_listings_older_than(client, name, interval=f"{months} months")
         return listings_found, listings_upserted, "success", None
     except Exception as e:
         status = "error"

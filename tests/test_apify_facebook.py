@@ -4,6 +4,7 @@ from __future__ import annotations
 import pytest
 
 from hunter.apify_facebook import (
+    _parse_post_date,
     passes_real_estate_filter,
     normalize_facebook_item,
 )
@@ -51,3 +52,33 @@ def test_normalize_facebook_item_keeps_real_estate():
     assert row is not None
     assert row.get("source") == "facebook"
     assert row.get("source_url") == "https://facebook.com/groups/xyz/posts/456"
+
+
+def test_parse_post_date_iso():
+    item = {"date_posted": "2024-06-15T10:00:00.000Z"}
+    dt = _parse_post_date(item)
+    assert dt is not None
+    assert dt.year == 2024
+    assert dt.month == 6
+    assert dt.day == 15
+
+
+def test_parse_post_date_timestamp():
+    # 2024-01-01 12:00:00 UTC
+    item = {"timestamp": 1704110400}
+    dt = _parse_post_date(item)
+    assert dt is not None
+    assert dt.year == 2024
+    assert dt.month == 1
+
+
+def test_normalize_facebook_item_sets_auction_date_when_in_item():
+    item = {
+        "postUrl": "https://facebook.com/groups/xyz/posts/789",
+        "text": "Wynajmę mieszkanie 2 pokoje, 45 m²",
+        "date_posted": "2024-05-20T08:00:00Z",
+    }
+    row = normalize_facebook_item(item)
+    assert row is not None
+    assert row.get("auction_date") is not None
+    assert "2024-05-20" in row["auction_date"]

@@ -12,6 +12,9 @@ import re
 from datetime import datetime, timezone
 from typing import Any, Optional
 
+# Pola z datą posta w odpowiedzi Apify (różne aktory)
+_POST_DATE_KEYS = ("date_posted", "postedAt", "time", "created_time", "timestamp")
+
 import httpx
 from loguru import logger
 
@@ -20,7 +23,12 @@ from hunter.http_utils import DEFAULT_HEADERS
 from hunter.price_fallback import extract_first_offer_url, fetch_price_from_url
 from hunter.price_parser import price_pln_from_full_text
 from hunter.schema import for_supabase, normalized_listing
-from hunter.supabase_client import get_client, log_scrape_run, upsert_listings
+from hunter.supabase_client import (
+    archive_listings_older_than,
+    get_client,
+    log_scrape_run,
+    upsert_listings,
+)
 from hunter.title_extractor import extract_short_title
 
 # Słowa charakterystyczne dla nieruchomości – post musi zawierać co najmniej jedno (Facebook: tylko takie trafiają do listings)
@@ -114,6 +122,35 @@ def passes_real_estate_filter(text: str) -> bool:
     return any(kw.lower() in t for kw in REAL_ESTATE_KEYWORDS)
 
 
+def _parse_post_date(item: dict[str, Any]) -> Optional[datetime]:
+    """Wyciąga datę posta z itemu Apify (date_posted, postedAt, time, created_time, timestamp). Zwraca datetime UTC lub None."""
+    for key in _POST_DATE_KEYS:
+        val = item.get(key)
+        if val is None:
+            continue
+        if isinstance(val, (int, float)):
+            try:
+                ts = float(val)
+                if ts > 1e12:  # milliseconds
+                    ts = ts / 1000.0
+                return datetime.fromtimestamp(ts, tz=timezone.utc)
+            except (ValueError, OSError):
+                continue
+        if isinstance(val, str) and val.strip():
+            s = val.strip()
+            try:
+                if "T" in s:
+                    dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+                else:
+                    dt = datetime.strptime(s[:10], "%Y-%m-%d").replace(tzinfo=timezone.utc)
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                return dt
+            except ValueError:
+                continue
+    return None
+
+
 def _source_url_from_item(item: dict[str, Any]) -> Optional[str]:
     url = item.get("postUrl") or item.get("url") or item.get("link") or item.get("post_url")
     if isinstance(url, str) and url.strip():
@@ -177,6 +214,7 @@ def normalize_facebook_item(
 
     raw_data = {k: v for k, v in item.items() if k not in ("images", "image")}
     raw_data.update(raw_extra)
+    auction_date = _parse_post_date(item)
     return normalized_listing(
         title=title,
         description=text[:5000] if text else None,
@@ -185,7 +223,7 @@ def normalize_facebook_item(
         city="",
         source="facebook",
         source_url=source_url,
-        auction_date=None,
+        auction_date=auction_date,
         images=images,
         raw_data=raw_data,
     )
@@ -229,9 +267,11 @@ def process_apify_dataset(
         logger.info("Apify Facebook: 0 listings after filter (dataset_id={})", dataset_id)
         return 0, 0
     client = get_client()
-    upserted = upsert_listings(client, rows)
-    started_at = datetime.now(timezone.utc).isoformat()
     finished_at = datetime.now(timezone.utc).isoformat()
+    started_at = finished_at
+    for row in rows:
+        row["last_seen_at"] = finished_at
+    upserted = upsert_listings(client, rows)
     log_scrape_run(
         client,
         "facebook",
@@ -242,4 +282,6 @@ def process_apify_dataset(
         "success",
         None,
     )
+    months = (cfg.get("scraping") or {}).get("archive_older_than_months", 2)
+    archive_listings_older_than(client, "facebook", interval=f"{months} months")
     return len(rows), upserted

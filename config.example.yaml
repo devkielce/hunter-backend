@@ -26,6 +26,8 @@ scraping:
   follow_link_for_price: true
   # If set, only follow links to these domains (e.g. ["arcabinvestments.com", "otodom.pl"]). Omit to allow any domain except social networks.
   # follow_link_domains: ["arcabinvestments.com"]
+  # For komornik, e_licytacje, amw: archive listings with auction_date older than this many months (default 2). See docs/ARCHIVE_RULES_PLAN.md.
+  # archive_older_than_months: 2
 
 # Apify (Facebook): token do pobierania datasetów; webhook_secret do weryfikacji POST /webhook/apify
 apify:

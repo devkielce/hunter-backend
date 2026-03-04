@@ -188,7 +188,7 @@ Frontend (Next.js) ← Supabase; proxy to Backend for POST/GET /api/run
 
 ---
 
-## 6. Source-archive (listings not seen in last 5 runs)
+## 6. Source-archive (two rules)
 
 After each **successful** run per source, the backend marks listings as "removed from source" if they were **not seen in the last 5 successful runs** for that source.
 
@@ -196,7 +196,9 @@ After each **successful** run per source, the backend marks listings as "removed
 - **When:** Archive runs only when the source has at least 5 successful runs in `scrape_runs`. Cutoff = 5th-to-last run’s `started_at`; listings with `last_seen_at < cutoff` or `last_seen_at IS NULL` get `removed_from_source_at = now()` and `notified = true`. Status is not changed.
 - **No dis-archive:** Once set, `removed_from_source_at` is never cleared by the backend.
 - **Frontend:** Filter with `removed_from_source_at IS NULL` by default.
-- **Migration:** Run `supabase_migration_source_archive.sql` once to add columns, trigger, and RPC.
+- **Migration:** Run `supabase_migration_source_archive.sql` and `supabase_migration_archive_by_age.sql`.
+
+**6.2 Archive by age (auction_date):** For komornik, e_licytacje, amw, **facebook**, listings with `auction_date` older than N months are archived (config: `scraping.archive_older_than_months`, default 2). For Facebook, `auction_date` is the post date from Apify (`date_posted`, `postedAt`, etc.); after each webhook run we call `archive_listings_older_than("facebook", ...)`. Details: `docs/ARCHIVE_RULES_PLAN.md`.
 
 ---
 

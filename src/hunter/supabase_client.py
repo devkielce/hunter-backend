@@ -9,6 +9,7 @@ from loguru import logger
 LISTINGS_TABLE = "listings"
 SCRAPE_RUNS_TABLE = "scrape_runs"
 ARCHIVE_RPC = "archive_listings_not_seen_since"
+ARCHIVE_OLDER_THAN_RPC = "archive_listings_older_than"
 
 
 def get_client():
@@ -124,6 +125,44 @@ def archive_listings_not_seen_in_last_n_runs(
         return count
     except Exception as e:
         logger.bind(source=source).warning("Archive step failed (listings unchanged): {}", e)
+        return 0
+
+
+def archive_listings_older_than(
+    client: Any,
+    source: str,
+    interval: str = "2 months",
+) -> int:
+    """
+    Mark listings as removed-from-source when auction_date is older than now() - interval.
+    Only for sources that have auction_date (komornik, e_licytacje, amw). Facebook has no auction_date.
+    Sets removed_from_source_at = now(), notified = true.
+    Returns number of listings updated.
+    """
+    try:
+        result = client.rpc(
+            ARCHIVE_OLDER_THAN_RPC,
+            {"p_source": source, "p_interval": interval},
+        ).execute()
+        raw = result.data
+        if raw is None:
+            count = 0
+        elif isinstance(raw, list) and raw:
+            count = int(raw[0]) if isinstance(raw[0], (int, float)) else 0
+        else:
+            count = int(raw)
+        if count > 0:
+            logger.bind(source=source).info(
+                "Archived {} listings (auction_date older than {})",
+                count,
+                interval,
+            )
+        return count
+    except Exception as e:
+        logger.bind(source=source).warning(
+            "Archive-by-age step failed (listings unchanged): {}. Run supabase_migration_archive_by_age.sql if needed.",
+            e,
+        )
         return 0
 
 
