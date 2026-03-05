@@ -124,10 +124,6 @@ def _parse_detail(html: str, url: str) -> Optional[dict[str, Any]]:
     )
 
 
-# Default: all regions (no filter). Set e_licytacje_region in config to e.g. "świętokrzyskie" to limit.
-DEFAULT_E_LICYTACJE_REGION = ""
-
-
 def _cutoff_for_days_back(days: int) -> Optional[datetime]:
     if days is None or days <= 0:
         return None
@@ -142,12 +138,6 @@ def scrape_elicytacje(config: Optional[dict] = None) -> list[dict[str, Any]]:
     max_listings = scraping.get("max_listings")  # e.g. on-demand run cap (20); None = no limit
     days_back = scraping.get("days_back")
     cutoff = _cutoff_for_days_back(int(days_back)) if days_back is not None else None
-    # Region filter: same behaviour as komornik — "" = all; e.g. "świętokrzyskie" = only that województwo
-    region_val = scraping.get("e_licytacje_region")
-    if region_val is None:
-        region = (DEFAULT_E_LICYTACJE_REGION or "").strip() or None
-    else:
-        region = (region_val or "").strip() or None
 
     results = []
     with httpx.Client(headers=DEFAULT_HEADERS, timeout=60.0, follow_redirects=True) as client:
@@ -171,10 +161,6 @@ def scrape_elicytacje(config: Optional[dict] = None) -> list[dict[str, Any]]:
                         r = sync_get_with_retry(client, item["url"], delay)
                         row = _parse_detail(r.text, item["url"])
                         if row:
-                            if region is not None:
-                                row_region = (row.get("region") or "").strip().lower()
-                                if row_region and region.lower() not in row_region:
-                                    continue
                             ad_str = row.get("auction_date")
                             if cutoff is not None and ad_str:
                                 try:

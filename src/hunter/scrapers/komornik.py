@@ -1,6 +1,7 @@
-"""Bailiff auctions: licytacje.komornik.pl — httpx + BeautifulSoup."""
+"""Bailiff auctions: licytacje.komornik.pl — list via Playwright (JS-rendered), detail via httpx."""
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 from urllib.parse import urljoin
@@ -15,10 +16,9 @@ from hunter.schema import normalized_listing
 from hunter.scrapers.common import is_likely_error_page
 from hunter.title_extractor import extract_short_title, extract_surface_m2
 
-# Oficjalny serwis Krajowej Rady Komorniczej — jedyne źródło dla tego scrapera
+# Oficjalny serwis Krajowej Rady Komorniczej
 BASE_URL = "https://licytacje.komornik.pl"
-# Real estate categories: 30=mieszkania, 29=domy, 31=garaze, 32=grunty, 33=lokale, 34=magazyny, 35=inne, 36=statki
-# Use Filter/30 for mieszkania (apartments) as main list; paginate with ?page=
+# 30=mieszkania; strona jest Vue/Nuxt (JS), więc listę pobieramy Playwrightem
 FILTER_NIERUCHOMOSCI = f"{BASE_URL}/Notice/Filter/30"
 
 
@@ -37,26 +37,14 @@ def _parse_auction_date(text: Optional[str]) -> Optional[datetime]:
     return None
 
 
-def _parse_list_page(
-    soup: BeautifulSoup,
-    base: str,
-    region_filter: Optional[str] = None,
-) -> list[dict[str, str]]:
-    """
-    Extract listing links from Notice/Filter page.
-    Table columns: 0=Lp, 1=photo, 2=date, 3=Nazwa, 4=Miasto (Województwo), 5=Cena, 6=?, 7=Więcej link.
-    If region_filter is set (e.g. 'świętokrzyskie'), only include rows where column 4 contains it.
-    """
+def _parse_list_page_from_soup(soup: BeautifulSoup, base: str) -> list[dict[str, str]]:
+    """Extract listing links from table HTML (server-rendered or Playwright HTML). No region filter."""
     items = []
-    region_lower = (region_filter or "").strip().lower()
     for tr in soup.select("table tr"):
         tds = tr.find_all("td")
         if len(tds) < 8:
             continue
-        miasto_woj = (tds[4].get_text(strip=True) or "").lower()
-        if region_lower and region_lower not in miasto_woj:
-            continue
-        a = tds[7].find("a", href=lambda h: h and "Notice/Details" in h)
+        a = tds[7].find("a", href=lambda h: h and "Notice/Details" in (h or ""))
         if not a:
             continue
         href = a.get("href")
@@ -66,7 +54,6 @@ def _parse_list_page(
         if "licytacje.komornik.pl" not in full_url or "Details" not in full_url:
             continue
         title = (tds[3].get_text(strip=True) or "").strip() or "Licytacja komornicza"
-        # Column 4 is "Miasto (Województwo)" e.g. "Suwałki  (podlaskie)" — extract region for frontend filtering
         raw_miasto_woj = (tds[4].get_text(strip=True) or "")
         region = None
         if "(" in raw_miasto_woj and ")" in raw_miasto_woj:
@@ -74,6 +61,45 @@ def _parse_list_page(
         items.append({"url": full_url, "title": title, "region": region})
     seen: set[str] = set()
     return [x for x in items if x["url"] not in seen and (seen.add(x["url"]) or True)]
+
+
+async def _fetch_list_items_playwright(
+    list_url: str,
+    page_num: int,
+    delay_seconds: float,
+) -> list[dict[str, str]]:
+    """Load list page with Playwright (Vue/Nuxt), return [{url, title, region}, ...]. Filter by region in app."""
+    from playwright.async_api import async_playwright
+
+    url = f"{list_url}?page={page_num}" if page_num > 1 else list_url
+    items: list[dict[str, str]] = []
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True)
+        try:
+            page = await browser.new_page()
+            await page.goto(url, wait_until="networkidle", timeout=45000)
+            await asyncio.sleep(delay_seconds)
+            html = await page.content()
+            await page.close()
+        finally:
+            await browser.close()
+    soup = BeautifulSoup(html, "html.parser")
+    items = _parse_list_page_from_soup(soup, BASE_URL)
+    if not items:
+        # Vue table might use different structure; try any link to Notice/Details
+        soup2 = BeautifulSoup(html, "html.parser")
+        for a in soup2.select('a[href*="Notice/Details"]'):
+            href = a.get("href")
+            if not href:
+                continue
+            full_url = urljoin(BASE_URL, href)
+            if "licytacje.komornik.pl" not in full_url or "Details" not in full_url:
+                continue
+            title = (a.get_text(strip=True) or "").strip() or "Licytacja komornicza"
+            items.append({"url": full_url, "title": title, "region": None})
+        seen = set()
+        items = [x for x in items if x["url"] not in seen and (seen.add(x["url"]) or True)]
+    return items
 
 
 def _parse_detail_page(html: str, url: str) -> Optional[dict[str, Any]]:
@@ -137,10 +163,6 @@ def _extract_city(location: str) -> str:
     return parts[0] if parts else location
 
 
-# Default: all regions (no filter). Set komornik_region in config to e.g. "świętokrzyskie" to limit.
-DEFAULT_KOMMORNIK_REGION = ""
-
-
 def _cutoff_for_days_back(days: int) -> Optional[datetime]:
     """Return cutoff datetime (UTC) for listings older than this are skipped. None if days_back not used."""
     if days is None or days <= 0:
@@ -153,59 +175,81 @@ def scrape_komornik(config: Optional[dict] = None) -> list[dict[str, Any]]:
     scraping = cfg.get("scraping", {})
     delay = float(scraping.get("httpx_delay_seconds", 1.5))
     max_pages = int(scraping.get("max_pages_auctions", 50))
-    max_listings = scraping.get("max_listings")  # e.g. on-demand run cap (20); None = no limit
-    # Only use default when key is missing; explicit "" means "all regions"
-    region_val = scraping.get("komornik_region")
-    if region_val is None:
-        region = (DEFAULT_KOMMORNIK_REGION or "").strip() or None
-    else:
-        region = (region_val or "").strip() or None
+    max_listings = scraping.get("max_listings")
+    pw_delay = float(scraping.get("playwright_delay_seconds", 3.0))
     days_back = scraping.get("days_back")
     cutoff = _cutoff_for_days_back(int(days_back)) if days_back is not None else None
 
     results = []
+    all_items: list[dict[str, str]] = []
+    use_playwright = False
+
     with httpx.Client(headers=DEFAULT_HEADERS, timeout=60.0, follow_redirects=True) as client:
-        page = 1
-        stop_early = False
-        while page <= max_pages and not stop_early:
-            list_url = f"{FILTER_NIERUCHOMOSCI}?page={page}" if page > 1 else FILTER_NIERUCHOMOSCI
-            try:
-                resp = sync_get_with_retry(client, list_url, delay)
-                soup = BeautifulSoup(resp.text, "html.parser")
-                items = _parse_list_page(soup, BASE_URL, region_filter=region)
-                logger.info("Komornik list page {}: {} links", page, len(items))
-                if not items:
-                    if page == 1:
-                        logger.warning(
-                            "Komornik: no links on first page (check region or site structure)"
-                        )
+        try:
+            resp = sync_get_with_retry(client, FILTER_NIERUCHOMOSCI, delay_seconds=delay)
+            soup = BeautifulSoup(resp.text, "html.parser")
+            first_page_items = _parse_list_page_from_soup(soup, BASE_URL)
+            if first_page_items:
+                all_items.extend(first_page_items)
+                logger.info("Komornik list page 1 (httpx): {} links", len(first_page_items))
+                for page in range(2, max_pages + 1):
+                    list_url = f"{FILTER_NIERUCHOMOSCI}?page={page}"
+                    resp = sync_get_with_retry(client, list_url, delay_seconds=delay)
+                    soup = BeautifulSoup(resp.text, "html.parser")
+                    page_items = _parse_list_page_from_soup(soup, BASE_URL)
+                    if not page_items:
+                        break
+                    all_items.extend(page_items)
+                    logger.info("Komornik list page {} (httpx): {} links", page, len(page_items))
+                    if max_listings is not None and len(all_items) >= max_listings:
+                        break
+            else:
+                use_playwright = True
+                logger.info("Komornik: list is JS-rendered, using Playwright")
+        except Exception as e:
+            logger.warning("Komornik httpx list failed: {}, trying Playwright", e)
+            use_playwright = True
+
+        if use_playwright:
+            all_items = []
+            for p in range(1, max_pages + 1):
+                try:
+                    page_items = asyncio.run(
+                        _fetch_list_items_playwright(FILTER_NIERUCHOMOSCI, p, pw_delay)
+                    )
+                    if not page_items:
+                        break
+                    all_items.extend(page_items)
+                    logger.info("Komornik list page {} (Playwright): {} links", p, len(page_items))
+                    if max_listings is not None and len(all_items) >= max_listings:
+                        break
+                except Exception as e:
+                    logger.warning("Komornik Playwright page {} failed: {}", p, e)
                     break
-                for item in items:
-                    try:
-                        r = sync_get_with_retry(client, item["url"], delay)
-                        row = _parse_detail_page(r.text, item["url"])
-                        if row:
-                            if item.get("region") is not None:
-                                row["region"] = item["region"]
-                            ad_str = row.get("auction_date")
-                            if cutoff is not None and ad_str:
-                                try:
-                                    ad = datetime.fromisoformat(ad_str.replace("Z", "+00:00"))
-                                    if not ad.tzinfo:
-                                        ad = ad.replace(tzinfo=timezone.utc)
-                                    if ad.astimezone(timezone.utc) < cutoff:
-                                        stop_early = True
-                                        break
-                                except (ValueError, TypeError):
-                                    pass
-                            results.append(row)
-                            if max_listings is not None and len(results) >= int(max_listings):
-                                stop_early = True
-                                break
-                    except Exception as e:
-                        logger.warning("Skip listing {}: {}", item["url"], e)
-                page += 1
-            except httpx.HTTPError as e:
-                logger.error("Komornik list page failed: {}", e)
-                break
+
+        to_fetch = all_items
+        if max_listings is not None:
+            to_fetch = all_items[:max_listings]
+        for item in to_fetch:
+            try:
+                r = sync_get_with_retry(client, item["url"], delay_seconds=delay)
+                row = _parse_detail_page(r.text, item["url"])
+                if row:
+                    if item.get("region") is not None:
+                        row["region"] = item["region"]
+                    ad_str = row.get("auction_date")
+                    if cutoff is not None and ad_str:
+                        try:
+                            ad = datetime.fromisoformat(ad_str.replace("Z", "+00:00"))
+                            if not ad.tzinfo:
+                                ad = ad.replace(tzinfo=timezone.utc)
+                            if ad.astimezone(timezone.utc) < cutoff:
+                                continue
+                        except (ValueError, TypeError):
+                            pass
+                    results.append(row)
+                    if max_listings is not None and len(results) >= max_listings:
+                        break
+            except Exception as e:
+                logger.warning("Skip listing {}: {}", item["url"], e)
     return results
