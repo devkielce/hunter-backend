@@ -18,8 +18,10 @@ from hunter.title_extractor import extract_short_title, extract_surface_m2
 
 # Oficjalny serwis Krajowej Rady Komorniczej
 BASE_URL = "https://licytacje.komornik.pl"
-# 30=mieszkania; strona jest Vue/Nuxt (JS), więc listę pobieramy Playwrightem
+# 30=mieszkania; listę i szczegóły pobieramy z obecnej struktury (obwieszczenia-o-licytacji)
 FILTER_NIERUCHOMOSCI = f"{BASE_URL}/Notice/Filter/30"
+# Nowa struktura linków (strona zmieniła się z Notice/Details na wyszukiwarka/obwieszczenia-o-licytacji)
+DETAIL_LINK_HREF = "obwieszczenia-o-licytacji"
 
 
 def _parse_auction_date(text: Optional[str]) -> Optional[datetime]:
@@ -38,20 +40,23 @@ def _parse_auction_date(text: Optional[str]) -> Optional[datetime]:
 
 
 def _parse_list_page_from_soup(soup: BeautifulSoup, base: str) -> list[dict[str, str]]:
-    """Extract listing links from table HTML (server-rendered or Playwright HTML). No region filter."""
-    items = []
+    """Extract listing links from list page (table or card links). No region filter."""
+    items: list[dict[str, str]] = []
+    # Stara struktura: tabela z linkami Notice/Details
     for tr in soup.select("table tr"):
         tds = tr.find_all("td")
         if len(tds) < 8:
             continue
-        a = tds[7].find("a", href=lambda h: h and "Notice/Details" in (h or ""))
+        a = tds[7].find("a", href=lambda h: h and ("Notice/Details" in (h or "") or DETAIL_LINK_HREF in (h or ""))
         if not a:
             continue
         href = a.get("href")
         if not href:
             continue
         full_url = urljoin(base, href)
-        if "licytacje.komornik.pl" not in full_url or "Details" not in full_url:
+        if "licytacje.komornik.pl" not in full_url:
+            continue
+        if "Details" not in full_url and DETAIL_LINK_HREF not in full_url:
             continue
         title = (tds[3].get_text(strip=True) or "").strip() or "Licytacja komornicza"
         raw_miasto_woj = (tds[4].get_text(strip=True) or "")
@@ -59,6 +64,17 @@ def _parse_list_page_from_soup(soup: BeautifulSoup, base: str) -> list[dict[str,
         if "(" in raw_miasto_woj and ")" in raw_miasto_woj:
             region = raw_miasto_woj[raw_miasto_woj.index("(") + 1 : raw_miasto_woj.index(")")].strip()
         items.append({"url": full_url, "title": title, "region": region})
+    # Nowa struktura: linki obwieszczenia-o-licytacji (karty, bez tabeli)
+    if not items:
+        for a in soup.select(f'a[href*="{DETAIL_LINK_HREF}"]'):
+            href = a.get("href")
+            if not href:
+                continue
+            full_url = urljoin(base, href)
+            if "licytacje.komornik.pl" not in full_url or DETAIL_LINK_HREF not in full_url:
+                continue
+            title = (a.get_text(strip=True) or "").strip() or "Licytacja komornicza"
+            items.append({"url": full_url, "title": title, "region": None})
     seen: set[str] = set()
     return [x for x in items if x["url"] not in seen and (seen.add(x["url"]) or True)]
 
@@ -80,7 +96,7 @@ async def _fetch_list_items_playwright(
             await page.goto(url, wait_until="domcontentloaded", timeout=25000)
             await asyncio.sleep(delay_seconds)
             try:
-                await page.wait_for_selector('a[href*="Notice/Details"]', timeout=15000)
+                await page.wait_for_selector(f'a[href*="{DETAIL_LINK_HREF}"]', timeout=15000)
             except Exception:
                 pass
             await asyncio.sleep(0.5)
@@ -91,14 +107,13 @@ async def _fetch_list_items_playwright(
     soup = BeautifulSoup(html, "html.parser")
     items = _parse_list_page_from_soup(soup, BASE_URL)
     if not items:
-        # Vue table might use different structure; try any link to Notice/Details
-        soup2 = BeautifulSoup(html, "html.parser")
-        for a in soup2.select('a[href*="Notice/Details"]'):
+        # Fallback: linki obwieszczenia-o-licytacji
+        for a in soup.select(f'a[href*="{DETAIL_LINK_HREF}"]'):
             href = a.get("href")
             if not href:
                 continue
             full_url = urljoin(BASE_URL, href)
-            if "licytacje.komornik.pl" not in full_url or "Details" not in full_url:
+            if "licytacje.komornik.pl" not in full_url or DETAIL_LINK_HREF not in full_url:
                 continue
             title = (a.get_text(strip=True) or "").strip() or "Licytacja komornicza"
             items.append({"url": full_url, "title": title, "region": None})
@@ -152,8 +167,14 @@ def _parse_detail_page(html: str, url: str) -> Optional[dict[str, Any]]:
 
     title_el = soup.select_one("h1, .title, .auction-title, [class*='title']")
     raw["title"] = title_el.get_text(strip=True) if title_el else ""
+    if not raw["title"]:
+        for tag in soup.find_all(["h1", "h2", "h3"], limit=1):
+            raw["title"] = tag.get_text(strip=True) or ""
+            break
     desc_el = soup.select_one(".description, .content, [class*='description'], [class*='content']")
     raw["description"] = desc_el.get_text(strip=True)[:5000] if desc_el else None
+    if not raw["description"] and soup.body:
+        raw["description"] = soup.body.get_text(separator=" ", strip=True)[:5000]
     price_el = soup.select_one("[class*='price'], [class*='cena'], .value")
     raw["price"] = price_el.get_text(strip=True) if price_el else None
     loc_el = soup.select_one("[class*='location'], [class*='address'], [class*='miejsce']")
