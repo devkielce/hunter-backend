@@ -30,6 +30,7 @@ from hunter.supabase_client import (
     upsert_listings,
 )
 from hunter.investment_score import compute_investment_score, compute_medians_per_region
+from hunter.scrapers.common import is_rental_only
 from hunter.title_extractor import extract_short_title, extract_surface_m2
 
 # Słowa charakterystyczne dla nieruchomości – post musi zawierać co najmniej jedno (Facebook: tylko takie trafiają do listings)
@@ -190,6 +191,8 @@ def normalize_facebook_item(
     text = _text_from_item(item)
     if not passes_real_estate_filter(text):
         return None
+    if is_rental_only(text, None):
+        return None  # tylko na sprzedaż, nie wynajem
     fallback_title = (text[:500] + "…") if len(text) > 500 else (text or "Post Facebook")
     title = extract_short_title(text, fallback=fallback_title)
     images = _images_from_item(item)

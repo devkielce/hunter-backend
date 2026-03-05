@@ -60,9 +60,13 @@ def price_pln_from_text(text: Optional[str]) -> Optional[int]:
     return int(round(pln * 100))  # grosze
 
 
-# Patterns to find price in long text (e.g. "cena wywołania wynosi 61 500,00 zł", "Miesięczny czynsz netto: 6 000 zł")
+# Patterns to find price in long text (e.g. "cena wywołania wynosi 61 500,00 zł", "Cena wywoławcza 132 000,00 PLN" on AMW)
 # Use \s* only (no [\d\s]*) so we don't consume digits of the price.
 _PRICE_IN_TEXT_PATTERNS = [
+    re.compile(
+        r"cena\s+wywo[łl]awcza\s+(\d[\d\s.,]*)\s*PLN",
+        re.I,
+    ),  # AMW: "Cena wywoławcza 132 000,00 PLN"
     re.compile(
         r"cena\s+wywo[łl]ania\s+(?:jest\s+równa\s+|wynosi\s+)\s*(\d[\d\s.,]*)\s*z[łl]",
         re.I,
@@ -79,6 +83,10 @@ _PRICE_IN_TEXT_PATTERNS = [
         r"czynsz\s+(?:netto|brutto)?\s*[:\s]*(\d[\d\s.,]*)\s*z[łl]",
         re.I,
     ),
+    re.compile(
+        r"(\d[\d\s]{2,}(?:,\d{2})?)\s*PLN\b",
+        re.I,
+    ),  # e.g. "132 000,00 PLN" (AMW and others)
     re.compile(
         r"(\d[\d\s]{2,}(?:,\d{2})?)\s*z[łl]\b",
         re.I,

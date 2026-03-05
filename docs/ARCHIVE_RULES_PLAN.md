@@ -37,6 +37,6 @@ Czyli masowa archiwizacja zwykle oznacza: **przez 5 runów scraper w ogóle nie 
 
 **Config:** `scraping.archive_older_than_months: 2` (domyślnie 2). Backend przekazuje `f"{months} months"` do RPC.
 
-**Migracje:** `supabase_migration_source_archive.sql` (kolumny + RPC „5 runów”), potem `supabase_migration_archive_by_age.sql` (RPC „starsze niż N miesięcy”).
+**Migracje:** `supabase_migration_source_archive.sql` (kolumny + RPC „5 runów”), potem `supabase_migration_archive_by_age.sql` (RPC „starsze niż N miesięcy”). W RPC `archive_listings_older_than` kolejność parametrów to `(p_interval, p_source)` tak, aby schema cache PostgREST poprawnie rozpoznawał funkcję przy wywołaniu z Pythona (parametry przekazywane po nazwie).
 
 Szczegóły: `docs/DOCUMENTATION.md` sekcja 6.

@@ -66,7 +66,7 @@ def fetch_price_from_url(
     Returns price in grosze or None.
     """
     try:
-        resp = sync_get_with_retry(client, url, delay=delay)
+        resp = sync_get_with_retry(client, url, delay_seconds=delay, timeout=timeout)
         if resp.status_code != 200:
             return None
         soup = BeautifulSoup(resp.text, "html.parser")

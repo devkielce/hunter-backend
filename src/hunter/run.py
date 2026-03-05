@@ -4,13 +4,16 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Callable, Optional
 
+import httpx
 from loguru import logger
 
 from hunter.config import get_config
+from hunter.http_utils import DEFAULT_HEADERS
 from hunter.investment_score import compute_investment_score, compute_medians_per_region
 from hunter.logging_config import setup_logging
+from hunter.price_fallback import fetch_price_from_url
 from hunter.schema import for_supabase
-from hunter.scrapers.common import is_likely_error_page
+from hunter.scrapers.common import is_likely_error_page, is_rental_only
 from hunter.supabase_client import (
     archive_listings_not_seen_in_last_n_runs,
     archive_listings_older_than,
@@ -75,6 +78,36 @@ def run_scraper(
                 "Skipped {} listing(s) as likely error pages before upsert",
                 len(rows) - len(rows_clean),
             )
+        # Tylko lokale na sprzedaż: odrzuć oferty wyłącznie na wynajem (wszystkie scrapery)
+        n_before_sale_filter = len(rows_clean)
+        rows_clean = [r for r in rows_clean if not is_rental_only(r.get("title"), r.get("description"))]
+        if len(rows_clean) < n_before_sale_filter:
+            logger.bind(source=name).info(
+                "Filtered out {} rental-only listing(s) (keeping sale/auction only)",
+                n_before_sale_filter - len(rows_clean),
+            )
+        # Gdy brak ceny – pobierz stronę szczegółową (source_url) i wyciągnij cenę (wszystkie scrapery)
+        scraping_cfg = cfg.get("scraping", {})
+        if scraping_cfg.get("follow_link_for_price", True):
+            delay = float(scraping_cfg.get("httpx_delay_seconds", 1.5))
+            with httpx.Client(
+                headers=DEFAULT_HEADERS, timeout=60.0, follow_redirects=True
+            ) as client:
+                for r in rows_clean:
+                    if r.get("price_pln") is not None:
+                        continue
+                    url = (r.get("source_url") or "").strip()
+                    if not url:
+                        continue
+                    price_pln = fetch_price_from_url(
+                        url, client, delay=delay, timeout=15.0
+                    )
+                    if price_pln is not None:
+                        r["price_pln"] = price_pln
+                        r.setdefault("raw_data", {})["price_from_detail_page"] = True
+                        logger.bind(source=name).debug(
+                            "Price from detail page: {} grosze", price_pln
+                        )
         medians = compute_medians_per_region(rows_clean)
         for r in rows_clean:
             r.setdefault("raw_data", {})
