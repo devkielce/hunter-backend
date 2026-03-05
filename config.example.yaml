@@ -3,6 +3,8 @@
 supabase:
   url: "https://YOUR_PROJECT.supabase.co"
   service_role_key: "YOUR_SERVICE_ROLE_KEY"
+  # Bucket for downloaded listing images when scraping.download_images is true (default: listing-images). Create a public bucket with this name in Supabase Dashboard → Storage.
+  # storage_bucket: "listing-images"
 
 scraping:
   httpx_delay_seconds: 1.5
@@ -25,6 +27,12 @@ scraping:
   # follow_link_domains: ["arcabinvestments.com"]
   # For komornik, e_licytacje, amw: archive listings with auction_date older than this many months (default 2). See docs/ARCHIVE_RULES_PLAN.md.
   # archive_older_than_months: 2
+  # Download listing images to Supabase Storage and replace listing.images with Storage URLs. Requires bucket "listing-images" (public). Default false.
+  # download_images: false
+  # Max images to download per listing (default 5).
+  # download_images_max_per_listing: 5
+  # Timeout in seconds per image GET (default 15).
+  # download_images_timeout_seconds: 15
 
 # Investment score (0–100) per listing. See docs/SCORING_HUNTER.md.
 # scoring:

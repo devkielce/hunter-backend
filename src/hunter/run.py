@@ -9,6 +9,7 @@ from loguru import logger
 
 from hunter.config import get_config
 from hunter.http_utils import DEFAULT_HEADERS
+from hunter.image_downloader import download_listing_images
 from hunter.investment_score import compute_investment_score, compute_medians_per_region
 from hunter.logging_config import setup_logging
 from hunter.price_fallback import fetch_price_from_url
@@ -108,6 +109,17 @@ def run_scraper(
                         logger.bind(source=name).debug(
                             "Price from detail page: {} grosze", price_pln
                         )
+        # Opcjonalnie: pobierz zdjęcia i wgraj do Supabase Storage (listing.images → URL-e z bucketu)
+        if scraping_cfg.get("download_images"):
+            timeout = float(scraping_cfg.get("download_images_timeout_seconds") or 15.0)
+            with httpx.Client(
+                headers=DEFAULT_HEADERS, timeout=timeout, follow_redirects=True
+            ) as http_client:
+                supabase_client = get_client()
+                rows_clean = [
+                    download_listing_images(r, http_client, supabase_client, cfg)
+                    for r in rows_clean
+                ]
         medians = compute_medians_per_region(rows_clean)
         for r in rows_clean:
             r.setdefault("raw_data", {})

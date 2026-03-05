@@ -1,4 +1,4 @@
-"""Bailiff auctions: licytacje.komornik.pl — list via Playwright (JS-rendered), detail via httpx."""
+"""Bailiff auctions: licytacje.komornik.pl — list and detail via Playwright when JS-rendered."""
 from __future__ import annotations
 
 import asyncio
@@ -77,8 +77,13 @@ async def _fetch_list_items_playwright(
         browser = await p.chromium.launch(headless=True)
         try:
             page = await browser.new_page()
-            await page.goto(url, wait_until="networkidle", timeout=45000)
+            await page.goto(url, wait_until="domcontentloaded", timeout=25000)
             await asyncio.sleep(delay_seconds)
+            try:
+                await page.wait_for_selector('a[href*="Notice/Details"]', timeout=15000)
+            except Exception:
+                pass
+            await asyncio.sleep(0.5)
             html = await page.content()
             await page.close()
         finally:
@@ -100,6 +105,44 @@ async def _fetch_list_items_playwright(
         seen = set()
         items = [x for x in items if x["url"] not in seen and (seen.add(x["url"]) or True)]
     return items
+
+
+async def _fetch_one_detail_playwright(browser: Any, url: str, delay_seconds: float) -> Optional[str]:
+    """Load one detail page with Playwright; return HTML or None."""
+    page = await browser.new_page()
+    try:
+        await page.goto(url, wait_until="domcontentloaded", timeout=20000)
+        await asyncio.sleep(delay_seconds)
+        try:
+            await page.wait_for_selector("body", timeout=5000)
+        except Exception:
+            pass
+        return await page.content()
+    except Exception as e:
+        logger.warning("Komornik Playwright detail {} failed: {}", url[:60], e)
+        return None
+    finally:
+        await page.close()
+
+
+async def _fetch_detail_pages_playwright(
+    urls: list[str],
+    delay_seconds: float,
+) -> dict[str, str]:
+    """Load many detail pages with one browser; return dict url -> html."""
+    from playwright.async_api import async_playwright
+
+    result: dict[str, str] = {}
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True)
+        try:
+            for url in urls:
+                html = await _fetch_one_detail_playwright(browser, url, delay_seconds)
+                if html:
+                    result[url] = html
+        finally:
+            await browser.close()
+    return result
 
 
 def _parse_detail_page(html: str, url: str) -> Optional[dict[str, Any]]:
@@ -230,10 +273,20 @@ def scrape_komornik(config: Optional[dict] = None) -> list[dict[str, Any]]:
         to_fetch = all_items
         if max_listings is not None:
             to_fetch = all_items[:max_listings]
-        for item in to_fetch:
-            try:
-                r = sync_get_with_retry(client, item["url"], delay_seconds=delay)
-                row = _parse_detail_page(r.text, item["url"])
+
+        if use_playwright:
+            # Detail pages are also JS-rendered; fetch with Playwright.
+            urls = [item["url"] for item in to_fetch]
+            detail_htmls = asyncio.run(_fetch_detail_pages_playwright(urls, pw_delay))
+            for item in to_fetch:
+                html = detail_htmls.get(item["url"])
+                if not html:
+                    continue
+                try:
+                    row = _parse_detail_page(html, item["url"])
+                except Exception as e:
+                    logger.warning("Skip listing {}: {}", item["url"], e)
+                    continue
                 if row:
                     if item.get("region") is not None:
                         row["region"] = item["region"]
@@ -250,6 +303,28 @@ def scrape_komornik(config: Optional[dict] = None) -> list[dict[str, Any]]:
                     results.append(row)
                     if max_listings is not None and len(results) >= max_listings:
                         break
-            except Exception as e:
-                logger.warning("Skip listing {}: {}", item["url"], e)
+        else:
+            for item in to_fetch:
+                try:
+                    r = sync_get_with_retry(client, item["url"], delay_seconds=delay)
+                    row = _parse_detail_page(r.text, item["url"])
+                except Exception as e:
+                    logger.warning("Skip listing {}: {}", item["url"], e)
+                    continue
+                if row:
+                    if item.get("region") is not None:
+                        row["region"] = item["region"]
+                    ad_str = row.get("auction_date")
+                    if cutoff is not None and ad_str:
+                        try:
+                            ad = datetime.fromisoformat(ad_str.replace("Z", "+00:00"))
+                            if not ad.tzinfo:
+                                ad = ad.replace(tzinfo=timezone.utc)
+                            if ad.astimezone(timezone.utc) < cutoff:
+                                continue
+                        except (ValueError, TypeError):
+                            pass
+                    results.append(row)
+                    if max_listings is not None and len(results) >= max_listings:
+                        break
     return results

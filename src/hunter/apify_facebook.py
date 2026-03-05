@@ -20,6 +20,7 @@ from loguru import logger
 
 from hunter.config import get_config
 from hunter.http_utils import DEFAULT_HEADERS
+from hunter.image_downloader import download_listing_images
 from hunter.price_fallback import extract_first_offer_url, fetch_price_from_url
 from hunter.price_parser import price_pln_from_full_text
 from hunter.schema import for_supabase, normalized_listing
@@ -273,6 +274,17 @@ def process_apify_dataset(
     if not rows_raw:
         logger.info("Apify Facebook: 0 listings after filter (dataset_id={})", dataset_id)
         return 0, 0
+    scraping_cfg = (cfg.get("scraping") or {})
+    if scraping_cfg.get("download_images"):
+        timeout = float(scraping_cfg.get("download_images_timeout_seconds") or 15.0)
+        with httpx.Client(
+            headers=DEFAULT_HEADERS, timeout=timeout, follow_redirects=True
+        ) as http_client:
+            supabase_client = get_client()
+            rows_raw = [
+                download_listing_images(r, http_client, supabase_client, cfg)
+                for r in rows_raw
+            ]
     medians = compute_medians_per_region(rows_raw)
     for r in rows_raw:
         r.setdefault("raw_data", {})
