@@ -82,3 +82,13 @@ def test_normalize_facebook_item_sets_auction_date_when_in_item():
     assert row is not None
     assert row.get("auction_date") is not None
     assert "2024-05-20" in row["auction_date"]
+
+
+def test_normalize_facebook_item_sets_surface_m2_when_in_text():
+    item = {
+        "postUrl": "https://facebook.com/groups/xyz/posts/999",
+        "text": "Sprzedam mieszkanie 62 m², 3 pokoje, ul. Kwiatowa.",
+    }
+    row = normalize_facebook_item(item)
+    assert row is not None
+    assert row.get("raw_data", {}).get("surface_m2") == 62.0

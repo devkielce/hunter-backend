@@ -13,7 +13,7 @@ from hunter.http_utils import DEFAULT_HEADERS, sync_get_with_retry
 from hunter.price_parser import price_pln_from_full_text, price_pln_from_text
 from hunter.schema import normalized_listing
 from hunter.scrapers.common import is_likely_error_page
-from hunter.title_extractor import extract_short_title
+from hunter.title_extractor import extract_short_title, extract_surface_m2
 
 # Oficjalny serwis Krajowej Rady Komorniczej — jedyne źródło dla tego scrapera
 BASE_URL = "https://licytacje.komornik.pl"
@@ -97,6 +97,9 @@ def _parse_detail_page(html: str, url: str) -> Optional[dict[str, Any]]:
             raw["images"].append(urljoin(url, src))
 
     combined_text = f"{raw['title'] or ''} {raw['description'] or ''}".strip()
+    surface_m2 = extract_surface_m2(combined_text)
+    if surface_m2 is not None:
+        raw["surface_m2"] = surface_m2
     title = extract_short_title(
         combined_text,
         fallback=raw["title"] or "Licytacja komornicza",

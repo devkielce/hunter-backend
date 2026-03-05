@@ -30,7 +30,7 @@ from hunter.supabase_client import (
     upsert_listings,
 )
 from hunter.investment_score import compute_investment_score, compute_medians_per_region
-from hunter.title_extractor import extract_short_title
+from hunter.title_extractor import extract_short_title, extract_surface_m2
 
 # Słowa charakterystyczne dla nieruchomości – post musi zawierać co najmniej jedno (Facebook: tylko takie trafiają do listings)
 REAL_ESTATE_KEYWORDS = [
@@ -215,6 +215,9 @@ def normalize_facebook_item(
 
     raw_data = {k: v for k, v in item.items() if k not in ("images", "image")}
     raw_data.update(raw_extra)
+    surface_m2 = extract_surface_m2(text)
+    if surface_m2 is not None:
+        raw_data["surface_m2"] = surface_m2
     auction_date = _parse_post_date(item)
     return normalized_listing(
         title=title,

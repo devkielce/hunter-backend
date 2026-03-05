@@ -1,6 +1,6 @@
 # Plan implementacji: zbieranie cen (i metrażu)
 
-**Zaimplementowano (Faza 1–2):** rozszerzony parser ceny, fallback z pełnego tekstu (Komornik, e-licytacje, AMW), follow-link dla Facebooka, config `follow_link_for_price` / `follow_link_domains`. **Facebook:** filtr „tylko nieruchomości” (grupy mieszane → tylko oferty nieruchomości; szczegóły: `docs/FACEBOOK_REAL_ESTATE_FILTER.md`). **Tytuł (jedno zdanie):** moduł `title_extractor.py` – ekstrakcja bez AI (typ + pokoje + m² + kondygnacje) → np. „Mieszkanie 2-pokojowe, 45 m²”; używane w Facebook, AMW, Komornik, e-licytacje. Metraż (Faza 4) pozostaje opcjonalny.
+**Zaimplementowano (Faza 1–2, Faza 4):** rozszerzony parser ceny, fallback z pełnego tekstu (Komornik, e-licytacje, AMW), follow-link dla Facebooka, config `follow_link_for_price` / `follow_link_domains`. **Facebook:** filtr „tylko nieruchomości” (grupy mieszane → tylko oferty nieruchomości; szczegóły: `docs/FACEBOOK_REAL_ESTATE_FILTER.md`). **Tytuł (jedno zdanie):** moduł `title_extractor.py` – ekstrakcja bez AI (typ + pokoje + m² + kondygnacje) → np. „Mieszkanie 2-pokojowe, 45 m²”; używane w Facebook, AMW, Komornik, e-licytacje. **Metraż (Faza 4):** ekstrakcja metrażu z opisu (`extract_surface_m2` z title_extractor), zapis w `raw_data.surface_m2` we wszystkich źródłach (Facebook, AMW, Komornik, e-licytacje); frontend może czytać `listing.raw_data?.surface_m2`. Kolumna `surface_m2` w DB pozostaje opcjonalna (migracja).
 
 Cel: zamiast „CENA DO USTALENIA” na każdym ogłoszeniu — wyciągać realne ceny ze stron (i ewentualnie z linków). Dokument zawiera plan backendu oraz **co frontend ma wiedzieć**.
 
@@ -47,11 +47,11 @@ Cel: zamiast „CENA DO USTALENIA” na każdym ogłoszeniu — wyciągać realn
 
 ---
 
-### Faza 4: Metraż (opcjonalnie)
+### Faza 4: Metraż ✅ Zaimplementowano
 
-1. **Parser metrażu:** Nowy plik `hunter/surface_parser.py` (analogicznie do `price_parser.py`): regex na „X m²”, „pow. X”, „powierzchni X m²”.
-2. **Zapis:** Na początek w `raw_data.surface_m2`; później opcjonalnie kolumna `surface_m2` w DB (migracja).
-3. **Frontend:** Jeśli pojawi się `surface_m2` (kolumna lub `raw_data`) — można wyświetlać w karcie i w skrócie (np. „54 m², 450 000 zł”).
+1. **Parser metrażu:** Wykorzystany `extract_surface_m2` z `title_extractor.py` (regex na „X m²”, „pow. X”, „powierzchnia X”).
+2. **Zapis:** W `raw_data.surface_m2` we wszystkich źródłach (Facebook, AMW, Komornik, e-licytacje). Kolumna `surface_m2` w DB opcjonalna (migracja).
+3. **Frontend:** Czyta `listing.raw_data?.surface_m2` (number) i wyświetla w karcie/skrócie (np. „54 m², 450 000 zł”).
 
 ---
 

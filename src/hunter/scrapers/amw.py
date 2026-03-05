@@ -15,7 +15,7 @@ from hunter.http_utils import DEFAULT_HEADERS, sync_get_with_retry
 from hunter.price_parser import price_pln_from_full_text, price_pln_from_text
 from hunter.schema import normalized_listing
 from hunter.scrapers.common import is_likely_error_page
-from hunter.title_extractor import extract_short_title
+from hunter.title_extractor import extract_short_title, extract_surface_m2
 
 BASE_URL = "https://amw.com.pl"
 # Search results: all offers (no filters). Pagination: ,page,N,limit,LIMIT,sort,estate_asc
@@ -148,6 +148,10 @@ def _parse_list_page(soup: BeautifulSoup, base: str) -> list[dict[str, Any]]:
         seen_source_urls.add(source_url)
         if is_likely_error_page(title, None):
             continue
+        raw_data = {"price_raw": price_str, "snippet": text[:500]}
+        surface_m2 = extract_surface_m2(text)
+        if surface_m2 is not None:
+            raw_data["surface_m2"] = surface_m2
         results.append({
             "title": f"Nieruchomość AMW — {title}",
             "description": f"Powierzchnia / Cena wywoławcza w ofercie AMW. {text[:1500]}",
@@ -157,7 +161,7 @@ def _parse_list_page(soup: BeautifulSoup, base: str) -> list[dict[str, Any]]:
             "source_url": source_url,
             "auction_date": auction_date,
             "region": region,
-            "raw_data": {"price_raw": price_str, "snippet": text[:500]},
+            "raw_data": raw_data,
         })
     return results
 
