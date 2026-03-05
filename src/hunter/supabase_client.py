@@ -189,8 +189,9 @@ def log_scrape_run(
     try:
         client.table(SCRAPE_RUNS_TABLE).insert(row).execute()
         logger.bind(source=source).info(
-            "Scrape run logged: status={} listings_upserted={}",
+            "Scrape run logged: status={} listings_found={} listings_upserted={}",
             status,
+            listings_found,
             listings_upserted,
         )
     except Exception as e:

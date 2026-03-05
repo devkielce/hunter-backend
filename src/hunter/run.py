@@ -60,6 +60,7 @@ def run_scraper(
             return listings_found, 0, "success", None
 
         if not rows:
+            log.info("Scraper returned 0 listings (nothing to upsert for this source)")
             finished_at = datetime.now(timezone.utc).isoformat()
             client = get_client()
             log_scrape_run(client, name, started_at, finished_at, 0, 0, "success", None)

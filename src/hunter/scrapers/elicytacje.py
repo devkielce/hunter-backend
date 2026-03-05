@@ -124,6 +124,27 @@ def _parse_detail(html: str, url: str) -> Optional[dict[str, Any]]:
     )
 
 
+def _stub_listing_from_item(item: dict[str, str]) -> dict[str, Any]:
+    """Minimal listing from list page when detail parse fails; saved to DB so run.py can try fetch_price_from_url."""
+    url = (item.get("url") or "").strip()
+    if not url:
+        raise ValueError("stub listing requires url")
+    title = (item.get("title") or "").strip() or "Licytacja sądowa"
+    return normalized_listing(
+        title=title,
+        description=None,
+        price_pln=None,
+        location="Polska",
+        city="Polska",
+        source="e_licytacje",
+        source_url=url,
+        auction_date=None,
+        images=[],
+        raw_data={"stub_from_list": True},
+        region=None,
+    )
+
+
 def _cutoff_for_days_back(days: int) -> Optional[datetime]:
     if days is None or days <= 0:
         return None
@@ -157,27 +178,30 @@ def scrape_elicytacje(config: Optional[dict] = None) -> list[dict[str, Any]]:
                         )
                     break
                 for item in items:
+                    row = None
                     try:
                         r = sync_get_with_retry(client, item["url"], delay)
                         row = _parse_detail(r.text, item["url"])
-                        if row:
-                            ad_str = row.get("auction_date")
-                            if cutoff is not None and ad_str:
-                                try:
-                                    ad = datetime.fromisoformat(ad_str.replace("Z", "+00:00"))
-                                    if not ad.tzinfo:
-                                        ad = ad.replace(tzinfo=timezone.utc)
-                                    if ad.astimezone(timezone.utc) < cutoff:
-                                        stop_early = True
-                                        break
-                                except (ValueError, TypeError):
-                                    pass
-                            results.append(row)
-                            if max_listings is not None and len(results) >= int(max_listings):
-                                stop_early = True
-                                break
                     except Exception as e:
-                        logger.warning("Skip listing {}: {}", item["url"], e)
+                        logger.warning("Fetch/parse listing {}: {} (saving stub)", item["url"][:60], e)
+                    if row:
+                        ad_str = row.get("auction_date")
+                        if cutoff is not None and ad_str:
+                            try:
+                                ad = datetime.fromisoformat(ad_str.replace("Z", "+00:00"))
+                                if not ad.tzinfo:
+                                    ad = ad.replace(tzinfo=timezone.utc)
+                                if ad.astimezone(timezone.utc) < cutoff:
+                                    stop_early = True
+                                    break
+                            except (ValueError, TypeError):
+                                pass
+                        results.append(row)
+                    else:
+                        results.append(_stub_listing_from_item(item))
+                    if max_listings is not None and len(results) >= int(max_listings):
+                        stop_early = True
+                        break
                 page += 1
             except httpx.HTTPError as e:
                 logger.error("E-licytacje list failed: {}", e)

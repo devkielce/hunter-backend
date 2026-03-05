@@ -219,6 +219,27 @@ def _parse_detail_page(html: str, url: str) -> Optional[dict[str, Any]]:
     )
 
 
+def _stub_listing_from_item(item: dict[str, str], source: str = "komornik") -> dict[str, Any]:
+    """Minimal listing from list page when detail parse fails; saved to DB so run.py can try fetch_price_from_url."""
+    url = (item.get("url") or "").strip()
+    if not url:
+        raise ValueError("stub listing requires url")
+    title = (item.get("title") or "").strip() or "Licytacja komornicza"
+    return normalized_listing(
+        title=title,
+        description=None,
+        price_pln=None,
+        location="Polska",
+        city="Polska",
+        source=source,
+        source_url=url,
+        auction_date=None,
+        images=[],
+        raw_data={"stub_from_list": True},
+        region=item.get("region"),
+    )
+
+
 def _extract_city(location: str) -> str:
     """Heuristic: first comma-separated part or whole if short."""
     if not location:
@@ -301,13 +322,12 @@ def scrape_komornik(config: Optional[dict] = None) -> list[dict[str, Any]]:
             detail_htmls = asyncio.run(_fetch_detail_pages_playwright(urls, pw_delay))
             for item in to_fetch:
                 html = detail_htmls.get(item["url"])
-                if not html:
-                    continue
-                try:
-                    row = _parse_detail_page(html, item["url"])
-                except Exception as e:
-                    logger.warning("Skip listing {}: {}", item["url"], e)
-                    continue
+                row = None
+                if html:
+                    try:
+                        row = _parse_detail_page(html, item["url"])
+                    except Exception as e:
+                        logger.warning("Parse listing {}: {} (saving stub)", item["url"][:60], e)
                 if row:
                     if item.get("region") is not None:
                         row["region"] = item["region"]
@@ -322,16 +342,18 @@ def scrape_komornik(config: Optional[dict] = None) -> list[dict[str, Any]]:
                         except (ValueError, TypeError):
                             pass
                     results.append(row)
-                    if max_listings is not None and len(results) >= max_listings:
-                        break
+                else:
+                    results.append(_stub_listing_from_item(item, "komornik"))
+                if max_listings is not None and len(results) >= max_listings:
+                    break
         else:
             for item in to_fetch:
+                row = None
                 try:
                     r = sync_get_with_retry(client, item["url"], delay_seconds=delay)
                     row = _parse_detail_page(r.text, item["url"])
                 except Exception as e:
-                    logger.warning("Skip listing {}: {}", item["url"], e)
-                    continue
+                    logger.warning("Fetch/parse listing {}: {} (saving stub)", item["url"][:60], e)
                 if row:
                     if item.get("region") is not None:
                         row["region"] = item["region"]
@@ -346,6 +368,8 @@ def scrape_komornik(config: Optional[dict] = None) -> list[dict[str, Any]]:
                         except (ValueError, TypeError):
                             pass
                     results.append(row)
-                    if max_listings is not None and len(results) >= max_listings:
-                        break
+                else:
+                    results.append(_stub_listing_from_item(item, "komornik"))
+                if max_listings is not None and len(results) >= max_listings:
+                    break
     return results
