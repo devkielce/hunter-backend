@@ -47,7 +47,7 @@ def _parse_list_page_from_soup(soup: BeautifulSoup, base: str) -> list[dict[str,
         tds = tr.find_all("td")
         if len(tds) < 8:
             continue
-        a = tds[7].find("a", href=lambda h: h and ("Notice/Details" in (h or "") or DETAIL_LINK_HREF in (h or ""))
+        a = tds[7].find("a", href=lambda h: h and ("Notice/Details" in (h or "") or DETAIL_LINK_HREF in (h or "")))
         if not a:
             continue
         href = a.get("href")
