@@ -33,6 +33,11 @@ def _rows_without_last_seen_at(rows: list[dict[str, Any]]) -> list[dict[str, Any
     return [{k: v for k, v in r.items() if k != "last_seen_at"} for r in rows]
 
 
+def _rows_without_price_per_m2(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Return copies of rows with 'price_per_m2' key removed (for DBs that don't have the column yet)."""
+    return [{k: v for k, v in r.items() if k != "price_per_m2"} for r in rows]
+
+
 def upsert_listings(client: Any, rows: list[dict[str, Any]]) -> int:
     """Idempotent upsert by source_url (no select-before-insert). Preserves status/notified."""
     if not rows:
@@ -75,6 +80,20 @@ def upsert_listings(client: Any, rows: list[dict[str, Any]]) -> int:
             )
             count = len(result.data) if result.data is not None else len(rows)
             logger.info("Upserted {} listings (without last_seen_at)", count)
+            return count
+        # Table may not have 'price_per_m2' column yet (PGRST204). Retry without it.
+        if "PGRST204" in err_msg and "price_per_m2" in err_msg.lower():
+            logger.warning(
+                "Supabase listings table has no 'price_per_m2' column; retrying upsert without it. "
+                "Run supabase_migration_geo_price.sql to add region + price_per_m2 columns."
+            )
+            result = (
+                client.table(LISTINGS_TABLE)
+                .upsert(_rows_without_price_per_m2(rows), on_conflict="source_url")
+                .execute()
+            )
+            count = len(result.data) if result.data is not None else len(rows)
+            logger.info("Upserted {} listings (without price_per_m2)", count)
             return count
         logger.exception("Supabase upsert failed: {}", e)
         raise

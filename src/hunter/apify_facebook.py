@@ -30,7 +30,8 @@ from hunter.supabase_client import (
     log_scrape_run,
     upsert_listings,
 )
-from hunter.investment_score import compute_investment_score, compute_medians_per_region
+from hunter.geo_filter import is_geo_filter_enabled, is_in_target_area
+from hunter.investment_score import compute_investment_score, compute_medians_per_region, get_surface_m2
 from hunter.scrapers.common import is_rental_only
 from hunter.title_extractor import extract_short_title, extract_surface_m2
 
@@ -274,6 +275,22 @@ def process_apify_dataset(
     if not rows_raw:
         logger.info("Apify Facebook: 0 listings after filter (dataset_id={})", dataset_id)
         return 0, 0
+    # Filtr geograficzny: tylko mazowieckie + Otwock ~30km (gdy włączony w config)
+    if is_geo_filter_enabled(cfg):
+        n_before_geo = len(rows_raw)
+        rows_raw = [
+            r for r in rows_raw
+            if is_in_target_area(r.get("region"), r.get("city"), r.get("location"))
+        ]
+        removed = n_before_geo - len(rows_raw)
+        if removed:
+            logger.info(
+                "Apify Facebook: geo filter removed {} listing(s) outside mazowieckie/Otwock 30km",
+                removed,
+            )
+    if not rows_raw:
+        logger.info("Apify Facebook: 0 listings after geo filter (dataset_id={})", dataset_id)
+        return 0, 0
     scraping_cfg = (cfg.get("scraping") or {})
     if scraping_cfg.get("download_images"):
         timeout = float(scraping_cfg.get("download_images_timeout_seconds") or 15.0)
@@ -290,6 +307,13 @@ def process_apify_dataset(
         r.setdefault("raw_data", {})
         score = compute_investment_score(r, medians, cfg)
         r["raw_data"]["investment_score"] = score
+        # Cena za m²: oblicz i zapisz jako kolumna DB + raw_data
+        price = r.get("price_pln")
+        surface = get_surface_m2(r)
+        if price is not None and surface is not None and surface > 0:
+            price_per_m2 = round((float(price) / 100.0) / surface, 2)
+            r["price_per_m2"] = price_per_m2
+            r["raw_data"]["price_per_m2"] = price_per_m2
     rows = [for_supabase(r) for r in rows_raw]
     client = get_client()
     finished_at = datetime.now(timezone.utc).isoformat()

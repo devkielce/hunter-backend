@@ -10,7 +10,8 @@ from loguru import logger
 from hunter.config import get_config
 from hunter.http_utils import DEFAULT_HEADERS
 from hunter.image_downloader import download_listing_images
-from hunter.investment_score import compute_investment_score, compute_medians_per_region
+from hunter.geo_filter import is_geo_filter_enabled, is_in_target_area
+from hunter.investment_score import compute_investment_score, compute_medians_per_region, get_surface_m2
 from hunter.logging_config import setup_logging
 from hunter.price_fallback import fetch_price_from_url
 from hunter.schema import for_supabase
@@ -88,6 +89,18 @@ def run_scraper(
                 "Filtered out {} rental-only listing(s) (keeping sale/auction only)",
                 n_before_sale_filter - len(rows_clean),
             )
+        # Filtr geograficzny: tylko mazowieckie + Otwock ~30km (gdy włączony w config)
+        if is_geo_filter_enabled(cfg):
+            n_before_geo = len(rows_clean)
+            rows_clean = [
+                r for r in rows_clean
+                if is_in_target_area(r.get("region"), r.get("city"), r.get("location"))
+            ]
+            if len(rows_clean) < n_before_geo:
+                logger.bind(source=name).info(
+                    "Geo filter: removed {} listing(s) outside mazowieckie/Otwock 30km area",
+                    n_before_geo - len(rows_clean),
+                )
         # Gdy brak ceny – pobierz stronę szczegółową (source_url) i wyciągnij cenę (wszystkie scrapery)
         scraping_cfg = cfg.get("scraping", {})
         if scraping_cfg.get("follow_link_for_price", True):
@@ -126,6 +139,13 @@ def run_scraper(
             r.setdefault("raw_data", {})
             score = compute_investment_score(r, medians, cfg)
             r["raw_data"]["investment_score"] = score
+            # Cena za m²: oblicz i zapisz jako kolumna DB + raw_data
+            price = r.get("price_pln")
+            surface = get_surface_m2(r)
+            if price is not None and surface is not None and surface > 0:
+                price_per_m2 = round((float(price) / 100.0) / surface, 2)
+                r["price_per_m2"] = price_per_m2
+                r["raw_data"]["price_per_m2"] = price_per_m2
         prepared = [for_supabase(r) for r in rows_clean]
         finished_at = datetime.now(timezone.utc).isoformat()
         for row in prepared:

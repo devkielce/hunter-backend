@@ -264,6 +264,8 @@ def scrape_komornik(config: Optional[dict] = None) -> list[dict[str, Any]]:
     pw_delay = float(scraping.get("playwright_delay_seconds", 3.0))
     days_back = scraping.get("days_back")
     cutoff = _cutoff_for_days_back(int(days_back)) if days_back is not None else None
+    # Allow custom filter URL with region filter (e.g. ?Province=14 for mazowieckie)
+    filter_url = scraping.get("komornik_list_url") or FILTER_NIERUCHOMOSCI
 
     results = []
     all_items: list[dict[str, str]] = []
@@ -271,14 +273,14 @@ def scrape_komornik(config: Optional[dict] = None) -> list[dict[str, Any]]:
 
     with httpx.Client(headers=DEFAULT_HEADERS, timeout=60.0, follow_redirects=True) as client:
         try:
-            resp = sync_get_with_retry(client, FILTER_NIERUCHOMOSCI, delay_seconds=delay)
+            resp = sync_get_with_retry(client, filter_url, delay_seconds=delay)
             soup = BeautifulSoup(resp.text, "html.parser")
             first_page_items = _parse_list_page_from_soup(soup, BASE_URL)
             if first_page_items:
                 all_items.extend(first_page_items)
                 logger.info("Komornik list page 1 (httpx): {} links", len(first_page_items))
                 for page in range(2, max_pages + 1):
-                    list_url = f"{FILTER_NIERUCHOMOSCI}?page={page}"
+                    list_url = f"{filter_url}?page={page}"
                     resp = sync_get_with_retry(client, list_url, delay_seconds=delay)
                     soup = BeautifulSoup(resp.text, "html.parser")
                     page_items = _parse_list_page_from_soup(soup, BASE_URL)
@@ -300,7 +302,7 @@ def scrape_komornik(config: Optional[dict] = None) -> list[dict[str, Any]]:
             for p in range(1, max_pages + 1):
                 try:
                     page_items = asyncio.run(
-                        _fetch_list_items_playwright(FILTER_NIERUCHOMOSCI, p, pw_delay)
+                        _fetch_list_items_playwright(filter_url, p, pw_delay)
                     )
                     if not page_items:
                         break

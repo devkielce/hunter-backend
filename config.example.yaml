@@ -20,7 +20,11 @@ scraping:
   # days_back: 1
   # Active sources: komornik, e_licytacje, amw (Facebook via webhook). Omit or [] to run all.
   sources: ["komornik", "e_licytacje", "amw"]
-  # Region filter removed: scrapers fetch all regions; filter by region (e.g. mazowieckie) in the app. See docs/FILTERS.md.
+    # URL-based region filter for scrapers (optional).
+  # licytacje.komornik.pl: add ?Province=14 for mazowieckie (province code 14).
+  # komornik_list_url: "https://licytacje.komornik.pl/Notice/Filter/30?Province=14"
+  # elicytacje.komornik.pl: add voivodeship filter param.
+  # elicytacje_list_url: "https://elicytacje.komornik.pl/wyszukiwarka-licytacji?mainCategory=REAL_ESTATE&sort=dateCreated%2CDESC&voivodeship=MAZOWIECKIE"
   # When price is missing (e.g. Facebook post), follow first "offer" link in text and try to extract price from that page. Set false to disable.
   follow_link_for_price: true
   # If set, only follow links to these domains (e.g. ["arcabinvestments.com", "otodom.pl"]). Omit to allow any domain except social networks.
@@ -33,6 +37,12 @@ scraping:
   # download_images_max_per_listing: 5
   # Timeout in seconds per image GET (default 15).
   # download_images_timeout_seconds: 15
+
+# Geographic filter: only keep listings in mazowieckie + Otwock ~30km area.
+# Set enabled: true to activate. Both run.py scrapers and Facebook webhook respect this.
+# When disabled (default), all listings are stored and filtering is done in the frontend.
+geo_filter:
+  enabled: true
 
 # Investment score (0–100) per listing. See docs/SCORING_HUNTER.md.
 # scoring:

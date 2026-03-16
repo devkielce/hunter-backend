@@ -159,13 +159,15 @@ def scrape_elicytacje(config: Optional[dict] = None) -> list[dict[str, Any]]:
     max_listings = scraping.get("max_listings")  # e.g. on-demand run cap (20); None = no limit
     days_back = scraping.get("days_back")
     cutoff = _cutoff_for_days_back(int(days_back)) if days_back is not None else None
+    # Allow custom list URL with region filter (e.g. &voivodeship=MAZOWIECKIE)
+    base_list_url = scraping.get("elicytacje_list_url") or LIST_URL
 
     results = []
     with httpx.Client(headers=DEFAULT_HEADERS, timeout=60.0, follow_redirects=True) as client:
         page = 1
         stop_early = False
         while page <= max_pages and not stop_early:
-            list_url = f"{LIST_URL}&page={page}" if page > 1 else LIST_URL
+            list_url = f"{base_list_url}&page={page}" if page > 1 else base_list_url
             try:
                 resp = sync_get_with_retry(client, list_url, delay)
                 soup = BeautifulSoup(resp.text, "html.parser")

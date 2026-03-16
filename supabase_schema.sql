@@ -15,6 +15,8 @@ CREATE TABLE IF NOT EXISTS public.listings (
   auction_date TIMESTAMPTZ,
   images TEXT[] DEFAULT '{}',
   raw_data JSONB DEFAULT '{}',
+  region TEXT,
+  price_per_m2 NUMERIC,
   status TEXT NOT NULL DEFAULT 'new' CHECK (status IN ('new', 'contacted', 'viewed', 'archived')),
   notified BOOLEAN NOT NULL DEFAULT false,
   last_seen_at TIMESTAMPTZ,
@@ -29,6 +31,8 @@ CREATE INDEX IF NOT EXISTS listings_created_at_idx ON public.listings (created_a
 CREATE INDEX IF NOT EXISTS listings_source_idx ON public.listings (source);
 CREATE INDEX IF NOT EXISTS listings_notified_idx ON public.listings (notified) WHERE notified = false;
 CREATE INDEX IF NOT EXISTS listings_removed_from_source_at_idx ON public.listings (removed_from_source_at) WHERE removed_from_source_at IS NULL;
+CREATE INDEX IF NOT EXISTS listings_region_idx ON public.listings (region);
+CREATE INDEX IF NOT EXISTS listings_price_per_m2_idx ON public.listings (price_per_m2);
 
 CREATE OR REPLACE FUNCTION public.set_updated_at()
 RETURNS TRIGGER AS $$
