@@ -201,7 +201,8 @@ def _parse_detail_page(html: str, url: str) -> Optional[dict[str, Any]]:
         preview = soup.select_one("#Preview, .schema-preview, [id*='review']") or soup.body
         full_text = preview.get_text(separator=" ", strip=True) if preview else (raw["description"] or "")
         price_pln = price_pln_from_full_text(full_text)
-    location = (raw["location"] or "").strip() or "Polska"
+    raw_location = (raw["location"] or "").strip() or "Polska"
+    location, region = _clean_map_location(raw_location)
     city = _extract_city(location)
     auction_date = _parse_auction_date(raw["date"])
 
@@ -216,6 +217,7 @@ def _parse_detail_page(html: str, url: str) -> Optional[dict[str, Any]]:
         auction_date=auction_date,
         images=raw["images"] or [],
         raw_data=raw,
+        region=region,
     )
 
 
@@ -238,6 +240,33 @@ def _stub_listing_from_item(item: dict[str, str], source: str = "komornik") -> d
         raw_data={"stub_from_list": True},
         region=item.get("region"),
     )
+
+
+_VOIVODESHIPS = [
+    "dolnośląskie", "kujawsko-pomorskie", "lubelskie", "lubuskie",
+    "łódzkie", "małopolskie", "mazowieckie", "opolskie",
+    "podkarpackie", "podlaskie", "pomorskie", "śląskie",
+    "świętokrzyskie", "warmińsko-mazurskie", "wielkopolskie",
+    "zachodniopomorskie",
+]
+
+
+def _clean_map_location(raw: str) -> tuple[str, Optional[str]]:
+    """
+    Extract clean address and region from komornik location like:
+    'map_dolnoslaskiedolnośląskiemap_markerWielowieś 45, 59-330 Ścinawa'
+    Returns (clean_address, region_or_None).
+    """
+    if "map_marker" not in raw:
+        return raw, None
+    address = raw.split("map_marker", 1)[1].strip()
+    prefix = raw.split("map_marker", 1)[0].lower()
+    region = None
+    for v in _VOIVODESHIPS:
+        if v in prefix:
+            region = v
+            break
+    return address or raw, region
 
 
 def _extract_city(location: str) -> str:
