@@ -305,6 +305,21 @@ def scrape_elicytacje(config: Optional[dict] = None) -> list[dict[str, Any]]:
                 logger.error("E-licytacje list failed: {}", e)
                 break
 
+    # Deduplicate across pages (same listing can appear on multiple paginated pages)
+    seen_urls: set[str] = set()
+    unique_items: list[dict[str, str]] = []
+    for item in all_items:
+        if item["url"] not in seen_urls:
+            seen_urls.add(item["url"])
+            unique_items.append(item)
+    if len(unique_items) < len(all_items):
+        logger.info(
+            "E-licytacje: removed {} duplicate URLs across pages ({} unique)",
+            len(all_items) - len(unique_items),
+            len(unique_items),
+        )
+    all_items = unique_items
+
     to_fetch = all_items
     if max_listings is not None:
         to_fetch = all_items[: int(max_listings)]

@@ -42,6 +42,17 @@ def upsert_listings(client: Any, rows: list[dict[str, Any]]) -> int:
     """Idempotent upsert by source_url (no select-before-insert). Preserves status/notified."""
     if not rows:
         return 0
+    # Deduplicate by source_url — PostgreSQL raises 21000 if the same key appears twice in one batch
+    seen: set[str] = set()
+    deduped: list[dict[str, Any]] = []
+    for r in rows:
+        url = r.get("source_url", "")
+        if url not in seen:
+            seen.add(url)
+            deduped.append(r)
+    if len(deduped) < len(rows):
+        logger.warning("upsert_listings: removed {} duplicate source_url(s)", len(rows) - len(deduped))
+    rows = deduped
     try:
         result = (
             client.table(LISTINGS_TABLE)
