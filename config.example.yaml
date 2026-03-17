@@ -44,6 +44,13 @@ scraping:
 geo_filter:
   enabled: true
 
+# AI enrichment via Claude API — filters bad listings, scores investment potential, generates short descriptions.
+# Set enabled: true and provide api_key (or ANTHROPIC_API_KEY env var on Railway).
+ai:
+  enabled: true
+  api_key: ""           # or set ANTHROPIC_API_KEY env var
+  model: "claude-haiku-4-5"   # claude-haiku-4-5 (fast/cheap) or claude-sonnet-4-5 (higher quality)
+
 # Investment score (0–100) per listing. See docs/SCORING_HUNTER.md.
 # scoring:
 #   weights:

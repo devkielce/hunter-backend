@@ -11,6 +11,7 @@ from hunter.config import get_config
 from hunter.http_utils import DEFAULT_HEADERS
 from hunter.image_downloader import download_listing_images
 from hunter.geo_filter import is_geo_filter_enabled, is_in_target_area
+from hunter.ai_enricher import enrich_with_ai
 from hunter.investment_score import compute_investment_score, compute_medians_per_region, get_surface_m2
 from hunter.logging_config import setup_logging
 from hunter.price_fallback import fetch_price_from_url
@@ -146,6 +147,9 @@ def run_scraper(
                 price_per_m2 = round((float(price) / 100.0) / surface, 2)
                 r["price_per_m2"] = price_per_m2
                 r["raw_data"]["price_per_m2"] = price_per_m2
+        # AI enrichment: validate location, score investment potential, generate short description
+        # Listings rejected by AI are dropped here (not upserted).
+        rows_clean = enrich_with_ai(rows_clean, cfg)
         prepared = [for_supabase(r) for r in rows_clean]
         finished_at = datetime.now(timezone.utc).isoformat()
         for row in prepared:
