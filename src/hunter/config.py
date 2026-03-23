@@ -28,4 +28,10 @@ def get_config() -> dict[str, Any]:
         cfg.setdefault("apify", {})["token"] = token
     if secret := os.getenv("APIFY_WEBHOOK_SECRET"):
         cfg.setdefault("apify", {})["webhook_secret"] = secret
+    if val := os.getenv("KOMORNIK_LIST_URL"):
+        cfg.setdefault("scraping", {})["komornik_list_url"] = val
+    if val := os.getenv("ELICYTACJE_LIST_URL"):
+        cfg.setdefault("scraping", {})["elicytacje_list_url"] = val
+    if val := os.getenv("AMW_REGION"):
+        cfg.setdefault("scraping", {})["amw_region"] = val
     return cfg
