@@ -290,22 +290,8 @@ def process_apify_dataset(
     if not rows_raw:
         logger.info("Apify Facebook: 0 listings after price filter (dataset_id={})", dataset_id)
         return 0, 0
-    # Filtr geograficzny: tylko mazowieckie + Otwock ~30km (gdy włączony w config)
-    if is_geo_filter_enabled(cfg):
-        n_before_geo = len(rows_raw)
-        rows_raw = [
-            r for r in rows_raw
-            if is_in_target_area(r.get("region"), r.get("city"), r.get("location"))
-        ]
-        removed = n_before_geo - len(rows_raw)
-        if removed:
-            logger.info(
-                "Apify Facebook: geo filter removed {} listing(s) outside mazowieckie/Otwock 30km",
-                removed,
-            )
-    if not rows_raw:
-        logger.info("Apify Facebook: 0 listings after geo filter (dataset_id={})", dataset_id)
-        return 0, 0
+    # Geo filter intentionally skipped for Facebook — location fields are usually empty/unreliable
+    # so applying it would drop all listings. Filtering is done in the frontend instead.
     if scraping_cfg.get("download_images"):
         timeout = float(scraping_cfg.get("download_images_timeout_seconds") or 15.0)
         with httpx.Client(
