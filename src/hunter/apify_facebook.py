@@ -275,6 +275,21 @@ def process_apify_dataset(
     if not rows_raw:
         logger.info("Apify Facebook: 0 listings after filter (dataset_id={})", dataset_id)
         return 0, 0
+    # Odrzuć oferty z ceną poniżej progu (domyślnie 5000 PLN)
+    scraping_cfg = (cfg.get("scraping") or {})
+    min_price_pln = int(scraping_cfg.get("min_price_pln", 5000))
+    if min_price_pln > 0:
+        n_before_price = len(rows_raw)
+        rows_raw = [
+            r for r in rows_raw
+            if r.get("price_pln") is None or r.get("price_pln") >= min_price_pln * 100
+        ]
+        removed = n_before_price - len(rows_raw)
+        if removed:
+            logger.info("Apify Facebook: filtered out {} listing(s) with price < {} PLN", removed, min_price_pln)
+    if not rows_raw:
+        logger.info("Apify Facebook: 0 listings after price filter (dataset_id={})", dataset_id)
+        return 0, 0
     # Filtr geograficzny: tylko mazowieckie + Otwock ~30km (gdy włączony w config)
     if is_geo_filter_enabled(cfg):
         n_before_geo = len(rows_raw)
@@ -291,7 +306,6 @@ def process_apify_dataset(
     if not rows_raw:
         logger.info("Apify Facebook: 0 listings after geo filter (dataset_id={})", dataset_id)
         return 0, 0
-    scraping_cfg = (cfg.get("scraping") or {})
     if scraping_cfg.get("download_images"):
         timeout = float(scraping_cfg.get("download_images_timeout_seconds") or 15.0)
         with httpx.Client(

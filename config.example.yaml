@@ -25,6 +25,10 @@ scraping:
   # komornik_list_url: "https://licytacje.komornik.pl/Notice/Filter/30?Province=14"
   # elicytacje.komornik.pl: add voivodeship filter param.
   # elicytacje_list_url: "https://elicytacje.komornik.pl/wyszukiwarka-licytacji?mainCategory=REAL_ESTATE&sort=dateCreated%2CDESC&voivodeship=MAZOWIECKIE"
+  # AMW: filter by region name (from Woj.: field on list page), e.g. "mazowieckie". Case-insensitive. Omit to keep all regions.
+  # amw_region: "mazowieckie"
+  # Minimum price in PLN to keep a listing (default 5000). Filters out likely rentals with low prices.
+  # min_price_pln: 5000
   # When price is missing (e.g. Facebook post), follow first "offer" link in text and try to extract price from that page. Set false to disable.
   follow_link_for_price: true
   # If set, only follow links to these domains (e.g. ["arcabinvestments.com", "otodom.pl"]). Omit to allow any domain except social networks.

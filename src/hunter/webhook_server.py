@@ -52,6 +52,15 @@ def _dataset_id_from_payload(body: dict) -> str | None:
     return None
 
 
+def _process_apify_background(dataset_id: str) -> None:
+    """Fetch Apify dataset and upsert to Supabase in a background thread."""
+    try:
+        found, upserted = process_apify_dataset(dataset_id)
+        logger.info("Apify background: dataset_id={} found={} upserted={}", dataset_id, found, upserted)
+    except Exception as e:
+        logger.exception("Apify background processing failed (dataset_id={}): {}", dataset_id, e)
+
+
 @app.route("/webhook/apify", methods=["POST"])
 def webhook_apify():
     """
@@ -74,15 +83,9 @@ def webhook_apify():
     if not dataset_id:
         logger.warning("Apify webhook: no datasetId or resource.defaultDatasetId in body")
         return jsonify({"error": "Missing datasetId or resource.defaultDatasetId"}), 400
-    try:
-        found, upserted = process_apify_dataset(dataset_id)
-        return jsonify({"ok": True, "listings_found": found, "listings_upserted": upserted}), 200
-    except ValueError as e:
-        logger.warning("Apify webhook: {}", e)
-        return jsonify({"error": str(e)}), 400
-    except Exception as e:
-        logger.exception("Apify webhook failed: {}", e)
-        return jsonify({"error": "Internal error"}), 500
+    t = threading.Thread(target=_process_apify_background, args=(dataset_id,), daemon=True)
+    t.start()
+    return jsonify({"ok": True, "status": "processing", "dataset_id": dataset_id}), 200
 
 
 def _check_run_secret() -> tuple[bool, Any]:

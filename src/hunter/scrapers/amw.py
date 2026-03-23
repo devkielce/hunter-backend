@@ -166,13 +166,46 @@ def _parse_list_page(soup: BeautifulSoup, base: str) -> list[dict[str, Any]]:
     return results
 
 
+def _is_real_detail_url(source_url: str) -> bool:
+    """True if source_url is a real AMW detail page (not a hash-based fallback)."""
+    return "#" not in source_url and "/pl/nieruchomosci/nieruchomosci-amw/" in source_url
+
+
+def _fetch_detail_images(client: "httpx.Client", url: str, delay: float) -> list[str]:
+    """Fetch AMW detail page and return image URLs found in gallery/content."""
+    try:
+        resp = sync_get_with_retry(client, url, delay)
+        soup = BeautifulSoup(resp.text, "html.parser")
+        images: list[str] = []
+        seen: set[str] = set()
+        for img in soup.select("img[src]"):
+            src = (img.get("src") or "").strip()
+            if not src:
+                continue
+            lower = src.lower()
+            if not any(ext in lower for ext in (".jpg", ".jpeg", ".png", ".webp", ".gif")):
+                continue
+            # Skip tiny icons/logos (path usually contains "logo", "icon", "sprite")
+            if any(word in lower for word in ("logo", "icon", "sprite", "pixel", "blank")):
+                continue
+            full = urljoin(BASE_URL, src)
+            if full not in seen:
+                seen.add(full)
+                images.append(full)
+        return images[:10]
+    except Exception as e:
+        logger.debug("AMW detail images fetch failed {}: {}", url[:80], e)
+        return []
+
+
 def scrape_amw(config: Optional[dict] = None) -> list[dict[str, Any]]:
-    """Scrape AMW search results. Uses list pages only (no detail pages)."""
+    """Scrape AMW search results. Uses list pages only (no detail pages for content)."""
     cfg = config or {}
     scraping = cfg.get("scraping", {})
     delay = float(scraping.get("httpx_delay_seconds", 1.5))
     max_pages = int(scraping.get("max_pages_auctions", 50))
     max_listings = scraping.get("max_listings")
+    amw_region = (scraping.get("amw_region") or "").strip().lower()
     limit_per_page = 50
     results = []
     seen_urls = set()
@@ -209,8 +242,24 @@ def scrape_amw(config: Optional[dict] = None) -> list[dict[str, Any]]:
                     )
                     results.append(row)
                     if max_listings is not None and len(results) >= int(max_listings):
-                        return results
+                        break
             except httpx.HTTPError as e:
                 logger.error("AMW list page {} failed: {}", page + 1, e)
                 break
+            if max_listings is not None and len(results) >= int(max_listings):
+                break
+        if amw_region:
+            n_before = len(results)
+            results = [r for r in results if (r.get("region") or "").lower() == amw_region]
+            removed = n_before - len(results)
+            if removed:
+                logger.info("AMW region filter '{}': removed {} listing(s) outside region", amw_region, removed)
+        # Fetch images from detail pages (only for listings with real URLs, not hash fallbacks)
+        for row in results:
+            url = row.get("source_url", "")
+            if not _is_real_detail_url(url):
+                continue
+            images = _fetch_detail_images(client, url, delay)
+            if images:
+                row["images"] = images
     return results

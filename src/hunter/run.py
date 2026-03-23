@@ -90,6 +90,20 @@ def run_scraper(
                 "Filtered out {} rental-only listing(s) (keeping sale/auction only)",
                 n_before_sale_filter - len(rows_clean),
             )
+        # Odrzuć oferty z ceną poniżej progu (domyślnie 5000 PLN) — eliminuje wynajem z ukrytą ceną
+        scraping_cfg = cfg.get("scraping", {})
+        min_price_pln = int(scraping_cfg.get("min_price_pln", 5000))
+        if min_price_pln > 0:
+            n_before_price = len(rows_clean)
+            rows_clean = [
+                r for r in rows_clean
+                if r.get("price_pln") is None or r.get("price_pln") >= min_price_pln * 100
+            ]
+            removed = n_before_price - len(rows_clean)
+            if removed:
+                logger.bind(source=name).info(
+                    "Filtered out {} listing(s) with price < {} PLN", removed, min_price_pln
+                )
         # Filtr geograficzny: tylko mazowieckie + Otwock ~30km (gdy włączony w config)
         if is_geo_filter_enabled(cfg):
             n_before_geo = len(rows_clean)
@@ -103,7 +117,6 @@ def run_scraper(
                     n_before_geo - len(rows_clean),
                 )
         # Gdy brak ceny – pobierz stronę szczegółową (source_url) i wyciągnij cenę (wszystkie scrapery)
-        scraping_cfg = cfg.get("scraping", {})
         if scraping_cfg.get("follow_link_for_price", True):
             delay = float(scraping_cfg.get("httpx_delay_seconds", 1.5))
             with httpx.Client(
