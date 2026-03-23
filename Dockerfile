@@ -16,4 +16,4 @@ RUN pip install --no-cache-dir gunicorn
 
 EXPOSE 5000
 
-CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT:-5000} --workers 1 --threads 4 --timeout 120 --access-logfile - --error-logfile - --capture-output --log-level debug hunter.webhook_server:app"]
+CMD ["sh", "-c", "hunter schedule & gunicorn --bind 0.0.0.0:${PORT:-5000} --workers 1 --threads 4 --timeout 120 --access-logfile - --error-logfile - --capture-output --log-level debug hunter.webhook_server:app"]
