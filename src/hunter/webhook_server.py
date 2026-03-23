@@ -101,7 +101,7 @@ def _check_run_secret() -> tuple[bool, Any]:
 
 
 # When triggered via POST /api/run (Odśwież oferty), cap total listings so the run is quick. Daily/cron scrape is unchanged.
-ON_DEMAND_MAX_LISTINGS = 20
+ON_DEMAND_MAX_LISTINGS = 500
 
 
 def _run_scrapers_background() -> None:
